@@ -1,0 +1,51 @@
+{
+  "name": "spotify-unwrapped",
+  "version": "1.0.0",
+  "description": "A Spotify data tracker that lets users subscribe to having their data tracked and stored for their own viewing pleasure, whenever they want",
+  "scripts": {
+    "lint": "eslint --ext .js,.ts .",
+    "build": "tsc",
+    "build:watch": "tsc --watch",
+    "serve": "npm run build && firebase emulators:start --only functions",
+    "shell": "npm run build && firebase functions:shell",
+    "start": "npm run shell",
+    "deploy": "firebase deploy --only functions",
+    "logs": "firebase functions:log"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/huntinator7/spotify-unwrapped.git"
+  },
+  "keywords": [
+    "spotify",
+    "wrapped",
+    "data",
+    "songs",
+    "music",
+    "node",
+    "typescript"
+  ],
+  "main": "lib/index.js",
+  "dependencies": {
+    "firebase": "^9.14.0",
+    "firebase-admin": "^10.0.2",
+    "firebase-functions": "^3.18.0",
+    "spotify-web-api-node": "^5.0.2"
+  },
+  "devDependencies": {
+    "@types/spotify-web-api-node": "^5.0.7",
+    "@typescript-eslint/eslint-plugin": "^5.12.0",
+    "@typescript-eslint/parser": "^5.12.0",
+    "eslint": "^8.9.0",
+    "eslint-config-google": "^0.14.0",
+    "eslint-plugin-import": "^2.25.4",
+    "firebase-functions-test": "^0.2.0",
+    "typescript": "^4.5.4"
+  },
+  "author": "huntinator7",
+  "license": "GPL-3.0",
+  "bugs": {
+    "url": "https://github.com/huntinator7/spotify-unwrapped/issues"
+  },
+  "homepage": "https://github.com/huntinator7/spotify-unwrapped#readme"
+}
