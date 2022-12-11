@@ -2,7 +2,6 @@ import {firestore} from "firebase-admin";
 import {spotifyConfig} from "./config";
 import SpotifyWebApi from "spotify-web-api-node";
 import {User} from "./types";
-import {getAccessToken, refreshAccessToken} from "./spotifyHelper";
 import {FieldValue} from "firebase-admin/firestore";
 
 const db = firestore();
@@ -22,12 +21,17 @@ const getUserRecentListens = async (users: firestore.QueryDocumentSnapshot<fires
   const user = {...users[i].data(), id: users[i].id} as User;
   console.log(JSON.stringify(user));
 
-  const accessTokenRes = await refreshAccessToken(user.refresh_token);
-  console.log(accessTokenRes);
-  spotifyApi.setAccessToken(accessTokenRes.access_token);
+  if (!user.refresh_token) {
+    getUserRecentListens(users, i + 1);
+  } else {
+    spotifyApi.setRefreshToken(user.refresh_token);
+    const accessTokenRes = await spotifyApi.refreshAccessToken();
+    console.log(accessTokenRes);
+    spotifyApi.setAccessToken(accessTokenRes.body.access_token);
 
-  await getAllRecentlyPlayedByUser(user);
-  setTimeout(() => getUserRecentListens(users, i + 1), 10000);
+    await getAllRecentlyPlayedByUser(user);
+    setTimeout(() => getUserRecentListens(users, i + 1), 10000);
+  }
 };
 
 
@@ -60,14 +64,12 @@ const sendTrackToDB = (track: SpotifyApi.PlayHistoryObject, userId: string) => {
 export const initializeSpotify = async (user: User) => {
   console.log("Initializing Spotify for ", user);
 
-  spotifyApi.setRefreshToken(user.auth_code);
-  const accessTokenRes = await getAccessToken(user.auth_code, user.code_verifier);
+  const accessTokenRes = await spotifyApi.authorizationCodeGrant(user.auth_code);
   console.log(accessTokenRes);
-  spotifyApi.setAccessToken(accessTokenRes.access_token);
+  spotifyApi.setAccessToken(accessTokenRes.body.access_token);
   await db.collection("User").doc(user.id).update({
-    refresh_token: accessTokenRes.refresh_token,
+    refresh_token: accessTokenRes.body.refresh_token,
     auth_code: FieldValue.delete(),
-    code_verifier: FieldValue.delete(),
   });
 
   getAllRecentlyPlayedByUser(user);
