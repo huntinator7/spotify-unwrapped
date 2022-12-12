@@ -47,14 +47,17 @@ const getAllRecentlyPlayedByUser = async (user: User): Promise<string> => {
   try {
     const mostRecent = await spotifyApi.getMyRecentlyPlayedTracks({limit: 50, after: parseInt(user.last_cursor ?? "0")});
     console.log(`gARPBU mostRecent, ${mostRecent?.body?.items?.length}`);
-    const newRecentTracks = mostRecent?.body?.items?.map((t) => cleanTrack(t));
-    await Promise.all(newRecentTracks.sort((t1, t2)=> t1.played_at > t2.played_at ? 1 : -1)
-        .map((track) => sendTrackToDB(track, user.id)));
-    await db.collection("User").doc(user.id).update({
-      last_updated: new Date().toISOString(),
-      ...(newRecentTracks.length ? {last_cursor: mostRecent.body.cursors.after} : {}),
-    });
-    return "SUCCESS";
+    if (mostRecent?.body?.items?.length) {
+      const newRecentTracks = mostRecent?.body?.items?.map((t) => cleanTrack(t));
+      await Promise.all(newRecentTracks.sort((t1, t2)=> t1.played_at > t2.played_at ? 1 : -1)
+          .map((track) => sendTrackToDB(track, user.id)));
+      await db.collection("User").doc(user.id).update({
+        last_updated: new Date().toISOString(),
+        ...(newRecentTracks.length ? {last_cursor: mostRecent.body.cursors.after} : {}),
+      });
+      return "SUCCESS " + mostRecent?.body?.items?.length;
+    }
+    return "SUCCESS NONE";
   } catch (e) {
     console.log(`gARPBU ERROR, ${JSON.stringify(e)}`);
     return "FAIL";
@@ -78,7 +81,7 @@ export const initializeSpotify = async (user: User) => {
   console.log("Initializing Spotify for ", user);
 
   const accessTokenRes = await spotifyApi.authorizationCodeGrant(user.auth_code);
-  console.log(accessTokenRes);
+  console.log(`init ACCESS TOKEN RES, ${JSON.stringify(accessTokenRes.body)}`);
   spotifyApi.setAccessToken(accessTokenRes.body.access_token);
   await db.collection("User").doc(user.id).update({
     refresh_token: accessTokenRes.body.refresh_token,
