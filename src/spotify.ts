@@ -30,7 +30,7 @@ const getUserRecentListens = async (users: firestore.QueryDocumentSnapshot<fires
     spotifyApi.setAccessToken(accessTokenRes.body.access_token);
 
     await getAllRecentlyPlayedByUser(user);
-    setTimeout(() => getUserRecentListens(users, i + 1), 10000);
+    setTimeout(() => getUserRecentListens(users, i + 1), 5000);
   }
 };
 
@@ -41,7 +41,7 @@ const getAllRecentlyPlayedByUser = async (user: User) => {
   console.log("mostRecent", mostRecent?.body?.items?.length);
   const newRecentTracks = mostRecent?.body?.items?.map((t) => cleanTrack(t));
   newRecentTracks.sort((t1, t2)=> t1.played_at > t2.played_at ? 1 : -1)
-      .forEach((track, i) => setTimeout(() => sendTrackToDB(track, user.id), 500 * i));
+      .forEach((track) => sendTrackToDB(track, user.id));
   db.collection("User").doc(user.id).update({
     last_updated: new Date().toISOString(),
     ...(newRecentTracks.length ? {last_cursor: mostRecent.body.cursors.after} : {}),
