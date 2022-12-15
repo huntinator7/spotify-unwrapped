@@ -5,16 +5,16 @@ import {User} from "./types";
 import {FieldValue} from "firebase-admin/firestore";
 
 const db = firestore();
-const spotifyApi = new SpotifyWebApi(spotifyConfig);
 
 export const getRecentListens = async () => {
   console.log("getRecentListens", new Date().toDateString());
   const users = await db.collection("User").get();
   console.log(`gRL users, ${users.docs.length}`);
-  getUserRecentListens(users.docs, 0);
+  const spotifyApi = new SpotifyWebApi(spotifyConfig());
+  getUserRecentListens(users.docs, 0, spotifyApi);
 };
 
-const getUserRecentListens = async (users: firestore.QueryDocumentSnapshot<firestore.DocumentData>[], i: number) => {
+const getUserRecentListens = async (users: firestore.QueryDocumentSnapshot<firestore.DocumentData>[], i: number, spotifyApi: SpotifyWebApi) => {
   console.log(`getUserRecentListens, ${i}, ${users.length}`);
   if (i >= users.length) return;
 
@@ -23,7 +23,7 @@ const getUserRecentListens = async (users: firestore.QueryDocumentSnapshot<fires
 
   if (!user.refresh_token) {
     console.log(`gURL NO TOKEN, ${user.id}`);
-    getUserRecentListens(users, i + 1);
+    getUserRecentListens(users, i + 1, spotifyApi);
   } else {
     try {
       spotifyApi.setRefreshToken(user.refresh_token);
@@ -31,20 +31,21 @@ const getUserRecentListens = async (users: firestore.QueryDocumentSnapshot<fires
       console.log(`gURL ACCESS TOKEN RES, ${JSON.stringify(accessTokenRes.body)}`);
       spotifyApi.setAccessToken(accessTokenRes.body.access_token);
 
-      const gARPBU = await getAllRecentlyPlayedByUser(user);
+      const gARPBU = await getAllRecentlyPlayedByUser(user, spotifyApi);
       console.log(`gARPBU result: ${gARPBU} for ${user.id}`);
     } catch (e) {
       console.log(`gURL ERROR, ${JSON.stringify(e)}`);
     } finally {
-      setTimeout(() => getUserRecentListens(users, i + 1), 5000);
+      setTimeout(() => getUserRecentListens(users, i + 1, spotifyApi), 5000);
     }
   }
 };
 
 
-const getAllRecentlyPlayedByUser = async (user: User): Promise<string> => {
+const getAllRecentlyPlayedByUser = async (user: User, spotifyApi: SpotifyWebApi): Promise<string> => {
   console.log(`getAllRecentlyPlayedByUser, ${user.id}`);
   try {
+    console.log(`gARPBU spotify access token set, ${spotifyApi.getAccessToken()}`);
     const mostRecent = await spotifyApi.getMyRecentlyPlayedTracks({limit: 50, after: parseInt(user.last_cursor ?? "0")});
     console.log(`gARPBU mostRecent, ${mostRecent?.body?.items?.length}`);
     if (mostRecent?.body?.items?.length) {
@@ -80,13 +81,16 @@ const sendTrackToDB = (track: SpotifyApi.PlayHistoryObject, userId: string) => {
 export const initializeSpotify = async (user: User) => {
   console.log("Initializing Spotify for ", user);
 
+  const spotifyApi = new SpotifyWebApi(spotifyConfig(user.redirect_uri));
   const accessTokenRes = await spotifyApi.authorizationCodeGrant(user.auth_code);
   console.log(`init ACCESS TOKEN RES, ${JSON.stringify(accessTokenRes.body)}`);
   spotifyApi.setAccessToken(accessTokenRes.body.access_token);
   await db.collection("User").doc(user.id).update({
     refresh_token: accessTokenRes.body.refresh_token,
     auth_code: FieldValue.delete(),
+    redirect_uri: FieldValue.delete(),
+    spotify_state: FieldValue.delete(),
   });
 
-  getAllRecentlyPlayedByUser(user);
+  getAllRecentlyPlayedByUser(user, spotifyApi);
 };

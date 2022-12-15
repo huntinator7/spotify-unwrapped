@@ -6,6 +6,7 @@ export type User = {
   id: string;
   code_verifier: string;
   auth_code: string;
+  redirect_uri: string;
 }
 
 export type AccessTokenResponse = {
