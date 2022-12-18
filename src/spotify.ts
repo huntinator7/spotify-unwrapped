@@ -1,7 +1,7 @@
 import {firestore} from "firebase-admin";
 import {spotifyConfig} from "./config";
 import SpotifyWebApi from "spotify-web-api-node";
-import {User} from "./types";
+import {Track, User} from "./types";
 import {FieldValue} from "firebase-admin/firestore";
 
 const db = firestore();
@@ -36,11 +36,10 @@ const getUserRecentListens = async (users: firestore.QueryDocumentSnapshot<fires
     } catch (e) {
       console.log(`gURL ERROR, ${JSON.stringify(e)}`);
     } finally {
-      setTimeout(() => getUserRecentListens(users, i + 1, spotifyApi), 5000);
+      setTimeout(() => getUserRecentListens(users, i + 1, spotifyApi), 1000);
     }
   }
 };
-
 
 const getAllRecentlyPlayedByUser = async (user: User, spotifyApi: SpotifyWebApi): Promise<string> => {
   console.log(`getAllRecentlyPlayedByUser, ${user.id}`);
@@ -50,8 +49,8 @@ const getAllRecentlyPlayedByUser = async (user: User, spotifyApi: SpotifyWebApi)
     console.log(`gARPBU mostRecent, ${mostRecent?.body?.items?.length}`);
     if (mostRecent?.body?.items?.length) {
       const newRecentTracks = mostRecent?.body?.items?.map((t) => cleanTrack(t));
-      await Promise.all(newRecentTracks.sort((t1, t2)=> t1.played_at > t2.played_at ? 1 : -1)
-          .map((track) => sendTrackToDB(track, user.id)));
+      const sortedTracks = newRecentTracks.slice().sort((t1, t2)=> t1.played_at > t2.played_at ? 1 : -1);
+      await Promise.all(sortedTracks.map((track) => sendTrackToDB(track, user.id)));
       await db.collection("User").doc(user.id).update({
         last_updated: new Date().toISOString(),
         ...(newRecentTracks.length ? {last_cursor: mostRecent.body.cursors.after} : {}),
@@ -65,7 +64,7 @@ const getAllRecentlyPlayedByUser = async (user: User, spotifyApi: SpotifyWebApi)
   }
 };
 
-const cleanTrack = (track: SpotifyApi.PlayHistoryObject): SpotifyApi.PlayHistoryObject => {
+const cleanTrack = (track: Track): Track => {
   const cleanedTrack = track;
   cleanedTrack.track.available_markets = ["US"];
   cleanedTrack.track.album.available_markets = ["US"];
@@ -73,7 +72,7 @@ const cleanTrack = (track: SpotifyApi.PlayHistoryObject): SpotifyApi.PlayHistory
   return cleanedTrack;
 };
 
-const sendTrackToDB = (track: SpotifyApi.PlayHistoryObject, userId: string) => {
+const sendTrackToDB = (track: Track, userId: string) => {
   console.log("sendTrackToDB", track.track.name, userId);
   db.collection("User").doc(userId).collection("Plays").add(track);
 };

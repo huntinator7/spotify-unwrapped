@@ -9,6 +9,7 @@ const db = firestore();
 import {getRecentListens, initializeSpotify} from "./spotify";
 import {createUser} from "./user";
 import {User} from "./types";
+import {calculateSessions} from "./session";
 
 
 exports.getListens = functions
@@ -34,6 +35,17 @@ exports.initializeSpotify = functions.firestore.document("/User/{uid}")
 exports.getListensManual = functions.https.onRequest(async (req, res) => {
   try {
     await getRecentListens();
+    res.status(200).send("Success");
+  } catch (e) {
+    res.status(500).send("Error getting listens: " + JSON.stringify(e));
+  }
+});
+
+exports.getSessionsTest = functions.https.onRequest(async (req, res) => {
+  try {
+    const userDoc = (await db.collection("User").doc("vPXGkittqYRQMr9Z8egtGBQ2rOp2").get());
+    const user = {...userDoc.data(), id: userDoc.id} as User;
+    await calculateSessions(user);
     res.status(200).send("Success");
   } catch (e) {
     res.status(500).send("Error getting listens: " + JSON.stringify(e));
