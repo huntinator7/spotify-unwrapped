@@ -3,6 +3,7 @@ import {spotifyConfig} from "./config";
 import SpotifyWebApi from "spotify-web-api-node";
 import {Track, User} from "./types";
 import {FieldValue} from "firebase-admin/firestore";
+import {calculateSessions} from "./session";
 
 const db = firestore();
 
@@ -15,7 +16,7 @@ export const getRecentListens = async () => {
 };
 
 const getUserRecentListens = async (users: firestore.QueryDocumentSnapshot<firestore.DocumentData>[], i: number, spotifyApi: SpotifyWebApi) => {
-  console.log(`getUserRecentListens, ${i}, ${users.length}`);
+  console.log(`getUserRecentListens, ${i}, ${new Date()}`);
   if (i >= users.length) return;
 
   const user = {...users[i].data(), id: users[i].id} as User;
@@ -55,6 +56,7 @@ const getAllRecentlyPlayedByUser = async (user: User, spotifyApi: SpotifyWebApi)
         last_updated: new Date().toISOString(),
         ...(newRecentTracks.length ? {last_cursor: mostRecent.body.cursors.after} : {}),
       });
+      calculateSessions(user);
       return "SUCCESS " + mostRecent?.body?.items?.length;
     }
     return "SUCCESS NONE";
@@ -72,9 +74,9 @@ const cleanTrack = (track: Track): Track => {
   return cleanedTrack;
 };
 
-const sendTrackToDB = (track: Track, userId: string) => {
+const sendTrackToDB = async (track: Track, userId: string) => {
   console.log("sendTrackToDB", track.track.name, userId);
-  db.collection("User").doc(userId).collection("Plays").add(track);
+  await db.collection("User").doc(userId).collection("Plays").add(track);
 };
 
 export const initializeSpotify = async (user: User) => {

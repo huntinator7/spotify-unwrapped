@@ -33,11 +33,16 @@ exports.initializeSpotify = functions.firestore.document("/User/{uid}")
     });
 
 exports.getListensManual = functions.https.onRequest(async (req, res) => {
-  try {
-    await getRecentListens();
-    res.status(200).send("Success");
-  } catch (e) {
-    res.status(500).send("Error getting listens: " + JSON.stringify(e));
+  const key: string = (await db.collection("Secrets").doc("root").get()).get("listensManualKey");
+  if (req.params.key !== key) {
+    res.status(401).send("Not authorized: Incorrect key provided");
+  } else {
+    try {
+      await getRecentListens();
+      res.status(200).send("Success");
+    } catch (e) {
+      res.status(500).send("Error getting listens: " + JSON.stringify(e));
+    }
   }
 });
 

@@ -21,6 +21,7 @@ export const calculateSessions = async (user: User) => {
   assignPlayToSession(latestSession);
   // func (session)
   async function assignPlayToSession(session: firestore.DocumentSnapshot<Session>, lastPlayParam?: firestore.QueryDocumentSnapshot<Track>) {
+    console.log(`APTS: init, ${user.id}, ${session.id}, ${lastPlayParam?.id}`);
     const lastPlay = lastPlayParam ?? await ((session.get("latest_play") as firestore.DocumentReference).get()) as firestore.DocumentSnapshot<Track>;
     // get the last play not analyzed (sort played_at asc, after last play reference)
     const nextPlay = (await db.collection("User").doc(user.id).collection("Plays")
@@ -34,6 +35,7 @@ export const calculateSessions = async (user: User) => {
     const timeBetweenPlays: number = getStartTime(nextPlay.data()) - getEndTime(lastPlay.data());
     // if within threshold,
     if (timeBetweenPlays < 1000 * 60 * 5) {
+      console.log(`APTS: same session, timeBetweenPlays ${timeBetweenPlays}`);
       // same session
       //  add session reference to play
       await db.collection("User").doc(user.id).collection("Plays").doc(nextPlay.id).update({
@@ -50,6 +52,7 @@ export const calculateSessions = async (user: User) => {
       assignPlayToSession(session, nextPlay);
       //  call func again with same session
     } else {
+      console.log(`APTS: new session, timeBetweenPlays ${timeBetweenPlays}`);
       // else
       //    create new session
       const newSession = await db.collection("User").doc(user.id).collection("Sessions").add({
