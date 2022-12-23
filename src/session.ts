@@ -1,10 +1,12 @@
 import {FieldValue} from "firebase-admin/firestore";
 import {firestore} from "firebase-admin";
 import {Session, Track, User} from "./types";
+import {v4 as uuidv4} from "uuid";
 
 const db = firestore();
 
 export const calculateSessions = async (user: User) => {
+  console.time("calculateSessions " + user.id);
   console.log("calculateSessions: " + user.id);
   // start_time
   // end_time
@@ -21,40 +23,51 @@ export const calculateSessions = async (user: User) => {
   assignPlayToSession(latestSession);
   // func (session)
   async function assignPlayToSession(session: firestore.DocumentSnapshot<Session>, lastPlayParam?: firestore.QueryDocumentSnapshot<Track>) {
-    console.log(`APTS: init, ${user.id}, ${session.id}, ${lastPlayParam?.id}`);
+    const id = uuidv4();
+    // console.log(`APTS: init, ${user.id}, ${session.id}, ${lastPlayParam?.id}`);
     const lastPlay = lastPlayParam ?? await ((session.get("latest_play") as firestore.DocumentReference).get()) as firestore.DocumentSnapshot<Track>;
     // get the last play not analyzed (sort played_at asc, after last play reference)
+    console.time("nextPlay " + id);
     const nextPlay = (await db.collection("User").doc(user.id).collection("Plays")
         .orderBy("played_at", "asc")
         .startAfter(lastPlay)
         .limit(1)
         .get() as firestore.QuerySnapshot<Track>)?.docs[0];
+    console.timeEnd("nextPlay " + id);
 
-    if (!nextPlay || !lastPlay) return;
+    if (!nextPlay || !lastPlay) {
+      console.timeEnd("calculateSessions " + user.id);
+      return;
+    }
     // compare play start time to session end time
     const timeBetweenPlays: number = getStartTime(nextPlay.data()) - getEndTime(lastPlay.data());
     // if within threshold,
     if (timeBetweenPlays < 1000 * 60 * 5) {
-      console.log(`APTS: same session, timeBetweenPlays ${timeBetweenPlays}`);
+      // console.log(`APTS: same session, timeBetweenPlays ${timeBetweenPlays}`);
       // same session
       //  add session reference to play
+      console.time("setSessionInPlay " + id);
       await db.collection("User").doc(user.id).collection("Plays").doc(nextPlay.id).update({
         session: session.ref,
       });
+      console.timeEnd("setSessionInPlay " + id);
       //  add play reference to session play references
       //  update session end_time (temp, don't push maybe)
+      console.time("updateSession " + id);
       await db.collection("User").doc(user.id).collection("Sessions").doc(session.id).update({
         play_references: FieldValue.arrayUnion(nextPlay.ref),
         latest_play: nextPlay.ref,
         end_time: new Date(getEndTime(nextPlay.data())).toISOString(),
         duration_ms: FieldValue.increment(nextPlay.data().track.duration_ms),
       });
+      console.timeEnd("updateSession " + id);
       assignPlayToSession(session, nextPlay);
       //  call func again with same session
     } else {
-      console.log(`APTS: new session, timeBetweenPlays ${timeBetweenPlays}`);
+      // console.log(`APTS: new session, timeBetweenPlays ${timeBetweenPlays}`);
       // else
       //    create new session
+      console.time("createSession " + id);
       const newSession = await db.collection("User").doc(user.id).collection("Sessions").add({
         start_time: nextPlay.data().played_at,
         end_time: new Date(getEndTime(nextPlay.data())).toISOString(),
@@ -62,10 +75,13 @@ export const calculateSessions = async (user: User) => {
         latest_play: nextPlay.ref,
         duration_ms: nextPlay.data().track.duration_ms,
       }) as firestore.DocumentReference<Session>;
+      console.timeEnd("createSession " + id);
       //    add session reference to play
+      console.time("addSession " + id);
       await db.collection("User").doc(user.id).collection("Plays").doc(nextPlay.id).update({
         session: newSession,
       });
+      console.timeEnd("addSession " + id);
       assignPlayToSession(await newSession.get(), nextPlay);
     }
   }

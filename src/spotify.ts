@@ -16,11 +16,10 @@ export const getRecentListens = async () => {
 };
 
 const getUserRecentListens = async (users: firestore.QueryDocumentSnapshot<firestore.DocumentData>[], i: number, spotifyApi: SpotifyWebApi) => {
-  console.log(`getUserRecentListens, ${i}, ${new Date()}`);
   if (i >= users.length) return;
 
   const user = {...users[i].data(), id: users[i].id} as User;
-  console.log(`gURL USER, ${JSON.stringify(user)}`);
+  console.log(`gURL USER ${i} ${user.id}}`);
 
   if (!user.refresh_token) {
     console.log(`gURL NO TOKEN, ${user.id}`);
@@ -29,11 +28,13 @@ const getUserRecentListens = async (users: firestore.QueryDocumentSnapshot<fires
     try {
       spotifyApi.setRefreshToken(user.refresh_token);
       const accessTokenRes = await spotifyApi.refreshAccessToken();
-      console.log(`gURL ACCESS TOKEN RES, ${JSON.stringify(accessTokenRes.body)}`);
+      // console.log(`gURL ACCESS TOKEN RES, ${JSON.stringify(accessTokenRes.body)}`);
       spotifyApi.setAccessToken(accessTokenRes.body.access_token);
 
-      const gARPBU = await getAllRecentlyPlayedByUser(user, spotifyApi);
-      console.log(`gARPBU result: ${gARPBU} for ${user.id}`);
+      console.time("garpbu " + user.id);
+      await getAllRecentlyPlayedByUser(user, spotifyApi);
+      console.timeEnd("garpbu " + user.id);
+      // console.log(`gARPBU result: ${gARPBU} for ${user.id}`);
     } catch (e) {
       console.log(`gURL ERROR, ${JSON.stringify(e)}`);
     } finally {
@@ -43,22 +44,36 @@ const getUserRecentListens = async (users: firestore.QueryDocumentSnapshot<fires
 };
 
 const getAllRecentlyPlayedByUser = async (user: User, spotifyApi: SpotifyWebApi): Promise<string> => {
-  console.log(`getAllRecentlyPlayedByUser, ${user.id}`);
+  // console.log(`gARPBU, ${user.id}`);
   try {
-    console.log(`gARPBU spotify access token set, ${spotifyApi.getAccessToken()}`);
-    const mostRecent = await spotifyApi.getMyRecentlyPlayedTracks({limit: 50, after: parseInt(user.last_cursor ?? "0")});
-    console.log(`gARPBU mostRecent, ${mostRecent?.body?.items?.length}`);
+    // console.log(`gARPBU spotify access token set, ${spotifyApi.getAccessToken()}`);
+    console.time("getMostRecent " + user.id);
+    const mostRecent = await spotifyApi.getMyRecentlyPlayedTracks({limit: 15, after: parseInt(user.last_cursor ?? "0")});
+    console.timeEnd("getMostRecent " + user.id);
+    // console.log(`gARPBU mostRecent, ${mostRecent?.body?.items?.length}`);
     if (mostRecent?.body?.items?.length) {
       const newRecentTracks = mostRecent?.body?.items?.map((t) => cleanTrack(t));
       const sortedTracks = newRecentTracks.slice().sort((t1, t2)=> t1.played_at > t2.played_at ? 1 : -1);
-      await Promise.all(sortedTracks.map((track) => sendTrackToDB(track, user.id)));
+
+      console.time("sendTracksToDB " + user.id);
+      const batch = db.batch();
+      sortedTracks.forEach((track) => {
+        const ref = db.collection("User").doc(user.id).collection("Plays").doc();
+        batch.set(ref, track);
+      });
+      await batch.commit();
+      console.timeEnd("sendTracksToDB " + user.id);
+
+      console.time("updateLastCursor " + user.id);
       await db.collection("User").doc(user.id).update({
         last_updated: new Date().toISOString(),
         ...(newRecentTracks.length ? {last_cursor: mostRecent.body.cursors.after} : {}),
       });
+      console.timeEnd("updateLastCursor " + user.id);
       calculateSessions(user);
       return "SUCCESS " + mostRecent?.body?.items?.length;
     }
+    calculateSessions(user);
     return "SUCCESS NONE";
   } catch (e) {
     console.log(`gARPBU ERROR, ${JSON.stringify(e)}`);
@@ -72,11 +87,6 @@ const cleanTrack = (track: Track): Track => {
   cleanedTrack.track.album.available_markets = ["US"];
 
   return cleanedTrack;
-};
-
-const sendTrackToDB = async (track: Track, userId: string) => {
-  console.log("sendTrackToDB", track.track.name, userId);
-  await db.collection("User").doc(userId).collection("Plays").add(track);
 };
 
 export const initializeSpotify = async (user: User) => {
