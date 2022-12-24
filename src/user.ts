@@ -1,9 +1,6 @@
 import {UserRecord} from "firebase-functions/v1/auth";
-import * as admin from "firebase-admin";
+import {queries} from "./queries";
 
 export const createUser = async (user: UserRecord) => {
-  await admin.firestore().collection("User").doc(user.uid).set({
-    created_date: new Date().toISOString(),
-    last_updated: new Date().toISOString(),
-  }, {merge: true});
+  await queries.createUser(user.uid);
 };

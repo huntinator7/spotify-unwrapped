@@ -28,5 +28,6 @@ module.exports = {
     camelcase: "off",
     "max-len": "off",
     "require-jsdoc": "off",
+    "@typescript-eslint/no-explicit-any": "off",
   },
 };

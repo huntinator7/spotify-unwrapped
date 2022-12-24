@@ -1,14 +1,13 @@
 import * as functions from "firebase-functions";
-import {firestore} from "firebase-admin";
 import {getApps, initializeApp} from "firebase-admin/app";
 if (!getApps().length) {
   initializeApp();
 }
-const db = firestore();
 
 import {getRecentListens, initializeSpotify} from "./spotify";
 import {createUser} from "./user";
 import {User} from "./types";
+import {queries} from "./queries";
 
 
 exports.getListens = functions
@@ -25,14 +24,14 @@ exports.initializeSpotify = functions.firestore.document("/User/{uid}")
       console.log(token, oldToken);
       if (token && !oldToken) {
         console.log("updating");
-        const userDoc = (await db.collection("User").doc(context.params.uid).get());
+        const userDoc = await queries.getUser(context.params.uid);
         const user = {...userDoc.data(), id: userDoc.id} as User;
         initializeSpotify(user);
       }
     });
 
 exports.getListensManual = functions.https.onRequest(async (req, res) => {
-  const key: string = (await db.collection("Secrets").doc("root").get()).get("listensManualKey");
+  const key: string = await queries.getSecret("listensManualKey");
   console.log(key, req.query.key, key === req.query.key);
   if (req.query.key !== key) {
     res.status(401).send("Not authorized: Incorrect key provided");

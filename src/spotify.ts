@@ -4,12 +4,11 @@ import SpotifyWebApi from "spotify-web-api-node";
 import {Track, User} from "./types";
 import {FieldValue} from "firebase-admin/firestore";
 import {calculateSessions} from "./session";
-
-const db = firestore();
+import {queries} from "./queries";
 
 export const getRecentListens = async () => {
   console.log("getRecentListens", new Date().toDateString());
-  const users = await db.collection("User").get();
+  const users = await queries.getUsers();
   console.log(`gRL users, ${users.docs.length}`);
   const spotifyApi = new SpotifyWebApi(spotifyConfig());
   getUserRecentListens(users.docs, 0, spotifyApi);
@@ -56,19 +55,20 @@ const getAllRecentlyPlayedByUser = async (user: User, spotifyApi: SpotifyWebApi)
       const sortedTracks = newRecentTracks.slice().sort((t1, t2)=> t1.played_at > t2.played_at ? 1 : -1);
 
       console.time("sendTracksToDB " + user.id);
-      const batch = db.batch();
-      sortedTracks.forEach((track) => {
-        const ref = db.collection("User").doc(user.id).collection("Plays").doc();
-        batch.set(ref, track);
+      queries.doBatch((batch, db) => {
+        sortedTracks.forEach((track) => {
+          const ref = db.collection("User").doc(user.id).collection("Plays").doc();
+          batch.set(ref, track);
+        });
       });
-      await batch.commit();
       console.timeEnd("sendTracksToDB " + user.id);
 
       console.time("updateLastCursor " + user.id);
-      await db.collection("User").doc(user.id).update({
-        last_updated: new Date().toISOString(),
-        ...(newRecentTracks.length ? {last_cursor: mostRecent.body.cursors.after} : {}),
-      });
+      await queries.updateUserLastUpdated(
+          user.id,
+          new Date().toISOString(),
+        newRecentTracks.length ? {last_cursor: mostRecent.body.cursors.after} : {}
+      );
       console.timeEnd("updateLastCursor " + user.id);
       calculateSessions(user);
       return "SUCCESS " + mostRecent?.body?.items?.length;
@@ -96,7 +96,7 @@ export const initializeSpotify = async (user: User) => {
   const accessTokenRes = await spotifyApi.authorizationCodeGrant(user.auth_code);
   console.log(`init ACCESS TOKEN RES, ${JSON.stringify(accessTokenRes.body)}`);
   spotifyApi.setAccessToken(accessTokenRes.body.access_token);
-  await db.collection("User").doc(user.id).update({
+  await queries.updateUser(user.id, {
     refresh_token: accessTokenRes.body.refresh_token,
     auth_code: FieldValue.delete(),
     redirect_uri: FieldValue.delete(),
