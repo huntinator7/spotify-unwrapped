@@ -15,8 +15,24 @@ async function getSecret(secret: string) {
   return (await db.collection("Secrets").doc("root").get()).get(secret);
 }
 
+async function getSession(userId: string, sessionId: string) {
+  return db.collection("User").doc(userId).collection("Sessions").doc(sessionId).get();
+}
+
+async function getSessions(userId: string) {
+  return db.collection("User").doc(userId).collection("Sessions").get();
+}
+
 async function getLatestSession(userId: string) {
   return db.collection("User").doc(userId).collection("Sessions").orderBy("end_time", "desc").limit(1).get();
+}
+
+async function getNextSession(userId: string, lastSession: firestore.DocumentSnapshot<Session>) {
+  return db.collection("User").doc(userId).collection("Sessions")
+      .orderBy("end_time", "desc")
+      .startAfter(lastSession)
+      .limit(1)
+      .get();
 }
 
 async function getNextPlay(userId: string, lastPlay: firestore.DocumentSnapshot<Track>) {
@@ -63,7 +79,7 @@ function updatePlay(userId: string, playId: string, payload: Record<string, any>
   return db.collection("User").doc(userId).collection("Plays").doc(playId).update(payload);
 }
 
-function updateSession(userId: string, sessionId: string, payload: Record<string, any>) {
+function updateSession(userId: string, sessionId: string, payload: firestore.UpdateData) {
   return db.collection("User").doc(userId).collection("Sessions").doc(sessionId).update(payload);
 }
 
@@ -76,6 +92,10 @@ function updateUserLastUpdated(userId: string, last_updated: string, additionalF
   );
 }
 
+function deleteSession(userId: string, sessionId: string) {
+  return db.collection("User").doc(userId).collection("Sessions").doc(sessionId).delete();
+}
+
 async function doBatch(cb: (batch: firestore.WriteBatch, db: firestore.Firestore) => void) {
   const batch = db.batch();
   cb(batch, db);
@@ -86,6 +106,9 @@ export const queries = {
   getUser,
   getUsers,
   getSecret,
+  getSession,
+  getSessions,
+  getNextSession,
   getLatestSession,
   getNextPlay,
   getFirstPlay,
@@ -96,5 +119,6 @@ export const queries = {
   updateUserLastUpdated,
   updatePlay,
   updateSession,
+  deleteSession,
   doBatch,
 };

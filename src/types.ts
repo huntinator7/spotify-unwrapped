@@ -20,7 +20,7 @@ export type Session = {
   start_time: string;
   end_time: string;
   latest_play: firestore.DocumentReference;
-  plays: firestore.DocumentReference[];
+  play_references: firestore.DocumentReference[];
   duration_ms: number;
 }
 

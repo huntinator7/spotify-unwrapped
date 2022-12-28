@@ -31,7 +31,7 @@ export const calculateSessions = async (user: User) => {
     }
 
     const timeBetweenPlays: number = getStartTime(nextPlay.data()) - getEndTime(lastPlay.data());
-    if (timeBetweenPlays < 1000 * 60 * 5) {
+    if (timeBetweenPlays < 1000 * 60 * 15) {
       console.time("setSessionInPlay " + id);
       await queries.updatePlay(user.id, nextPlay.id, {session: session.ref});
       console.timeEnd("setSessionInPlay " + id);
@@ -70,4 +70,41 @@ const initializeSessions = async (user: User) => {
     session: newSession,
   });
   return newSession.get();
+};
+
+export const initCombineSessions = async () => {
+  const users = await queries.getUsers();
+  users.forEach(async (u) => {
+    const user = {...u.data(), id: u.id} as User;
+    const latestSession = (await queries.getLatestSession(user.id)).docs[0] as DocumentSnapshot<Session>;
+    const nextSession = (await queries.getNextSession(user.id, latestSession)).docs[0] as DocumentSnapshot<Session>;
+    combineSessions(user, latestSession, nextSession);
+  });
+};
+
+export const combineSessions = async (user: User, laterSession: DocumentSnapshot<Session>, earlierSession: DocumentSnapshot<Session>) => {
+  console.log(`combineSessions, ${user.id}, ${laterSession?.id}, ${earlierSession?.id}`);
+  if (!laterSession || !earlierSession) return;
+  const ls = laterSession.data() as Session;
+  const es = earlierSession.data() as Session;
+  console.log(`comparing es ${es?.start_time} -- ${es?.end_time} to ls ${ls?.start_time} -- ${ls?.end_time}`);
+
+  const timeBetween = new Date(ls.start_time).valueOf() - new Date(es.end_time).valueOf();
+  if (timeBetween < 1000 * 60 * 15) {
+    // combine sessions
+    console.log(`tb ${timeBetween}, combining ${earlierSession.id} into ${laterSession.id}`);
+    await queries.updateSession(user.id, laterSession.id, {
+      start_time: es.start_time,
+      duration_ms: es.duration_ms + ls.duration_ms,
+      play_references: FieldValue.arrayUnion(...es.play_references),
+    });
+    await queries.deleteSession(user.id, earlierSession.id);
+    const newEarlierSession = (await queries.getNextSession(user.id, earlierSession)).docs[0] as DocumentSnapshot<Session>;
+    const newLaterSession = await queries.getSession(user.id, laterSession.id) as DocumentSnapshot<Session>;
+    combineSessions(user, newLaterSession, newEarlierSession);
+  } else {
+    console.log(`tb ${timeBetween}, not combining ${earlierSession.id} into ${laterSession.id}`);
+    const newEarlierSession = (await queries.getNextSession(user.id, earlierSession)).docs[0] as DocumentSnapshot<Session>;
+    combineSessions(user, earlierSession, newEarlierSession);
+  }
 };
