@@ -55,7 +55,7 @@ const getAllRecentlyPlayedByUser = async (user: User, spotifyApi: SpotifyWebApi)
       const sortedTracks = newRecentTracks.slice().sort((t1, t2)=> t1.played_at > t2.played_at ? 1 : -1);
 
       console.time("sendTracksToDB " + user.id);
-      queries.doBatch((batch, db) => {
+      queries.doBatch(async (batch, db) => {
         sortedTracks.forEach((track) => {
           const ref = db.collection("User").doc(user.id).collection("Plays").doc();
           batch.set(ref, track);

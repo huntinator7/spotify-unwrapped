@@ -9,6 +9,7 @@ import {createUser} from "./user";
 import {User} from "./types";
 import {queries} from "./queries";
 import {initCombineSessions} from "./session";
+import {initAggregatedSessions} from "./publicStats";
 
 
 exports.getListens = functions
@@ -41,7 +42,8 @@ exports.getListensManual = functions.https.onRequest(async (req, res) => {
       await getRecentListens();
       res.status(200).send("Success");
     } catch (e) {
-      res.status(500).send("Error getting listens: " + JSON.stringify(e));
+      console.log("Error: " + JSON.stringify(e));
+      res.status(500).send("Error: " + JSON.stringify(e));
     }
   }
 });
@@ -56,8 +58,24 @@ exports.combineSessionsManual = functions.https.onRequest(async (req, res) => {
       await initCombineSessions();
       res.status(200).send("Success");
     } catch (e) {
-      console.log("Error getting listens: " + JSON.stringify(e));
-      res.status(500).send("Error getting listens: " + JSON.stringify(e));
+      console.log("Error: " + JSON.stringify(e));
+      res.status(500).send("Error: " + JSON.stringify(e));
+    }
+  }
+});
+
+exports.initAggregatedSessions = functions.https.onRequest(async (req, res) => {
+  const key: string = await queries.getSecret("initAggregatedSessions");
+  console.log(key, req.query.key, key === req.query.key);
+  if (req.query.key !== key) {
+    res.status(401).send("Not authorized: Incorrect key provided");
+  } else {
+    try {
+      initAggregatedSessions(req.query.date as string);
+      res.status(200).send("Success");
+    } catch (e) {
+      console.log("Error: " + JSON.stringify(e));
+      res.status(500).send("Error: " + JSON.stringify(e));
     }
   }
 });
