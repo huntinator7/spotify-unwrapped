@@ -1,8 +1,8 @@
 import {FieldValue, DocumentSnapshot, QueryDocumentSnapshot} from "firebase-admin/firestore";
-import {Session, Track, User} from "./types";
+import {Session, Track, User} from "../types";
 import {v4 as uuidv4} from "uuid";
-import {queries} from "./queries";
-import {getEndTime, getStartTime} from "./helpers";
+import {queries} from "../scripts/queries";
+import {getEndTime, getStartTime} from "../scripts/helpers";
 
 export const calculateSessions = async (user: User) => {
   console.time("calculateSessions " + user.id);

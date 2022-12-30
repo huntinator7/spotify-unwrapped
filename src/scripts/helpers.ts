@@ -1,4 +1,4 @@
-import {Track} from "./types";
+import {Track} from "../types";
 
 export function getEndTime(track: Track | undefined): number {
   return track ?
@@ -39,4 +39,12 @@ export function getDay(d: Date): string {
 
 export function getXMinLater(d: Date, x: number): Date {
   return new Date(d.valueOf() + 1000 * 60 * x);
+}
+
+export function cleanTrack(track: Track): Track {
+  const cleanedTrack = track;
+  cleanedTrack.track.available_markets = ["US"];
+  cleanedTrack.track.album.available_markets = ["US"];
+
+  return cleanedTrack;
 }

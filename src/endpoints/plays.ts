@@ -1,10 +1,11 @@
 import {firestore} from "firebase-admin";
-import {spotifyConfig} from "./config";
+import {spotifyConfig} from "../config";
 import SpotifyWebApi from "spotify-web-api-node";
-import {Track, User} from "./types";
+import {User} from "../types";
 import {FieldValue} from "firebase-admin/firestore";
-import {calculateSessions} from "./session";
-import {queries} from "./queries";
+import {calculateSessions} from "./sessions";
+import {queries} from "../scripts/queries";
+import {cleanTrack} from "../scripts/helpers";
 
 export const getRecentListens = async () => {
   console.log("getRecentListens", new Date().toDateString());
@@ -27,13 +28,9 @@ const getUserRecentListens = async (users: firestore.QueryDocumentSnapshot<fires
     try {
       spotifyApi.setRefreshToken(user.refresh_token);
       const accessTokenRes = await spotifyApi.refreshAccessToken();
-      // console.log(`gURL ACCESS TOKEN RES, ${JSON.stringify(accessTokenRes.body)}`);
       spotifyApi.setAccessToken(accessTokenRes.body.access_token);
 
-      console.time("garpbu " + user.id);
       await getAllRecentlyPlayedByUser(user, spotifyApi);
-      console.timeEnd("garpbu " + user.id);
-      // console.log(`gARPBU result: ${gARPBU} for ${user.id}`);
     } catch (e) {
       console.log(`gURL ERROR, ${JSON.stringify(e)}`);
     } finally {
@@ -43,13 +40,9 @@ const getUserRecentListens = async (users: firestore.QueryDocumentSnapshot<fires
 };
 
 const getAllRecentlyPlayedByUser = async (user: User, spotifyApi: SpotifyWebApi): Promise<string> => {
-  // console.log(`gARPBU, ${user.id}`);
   try {
-    // console.log(`gARPBU spotify access token set, ${spotifyApi.getAccessToken()}`);
-    console.time("getMostRecent " + user.id);
     const mostRecent = await spotifyApi.getMyRecentlyPlayedTracks({limit: 15, after: parseInt(user.last_cursor ?? "0")});
     console.timeEnd("getMostRecent " + user.id);
-    // console.log(`gARPBU mostRecent, ${mostRecent?.body?.items?.length}`);
     if (mostRecent?.body?.items?.length) {
       const newRecentTracks = mostRecent?.body?.items?.map((t) => cleanTrack(t));
       const sortedTracks = newRecentTracks.slice().sort((t1, t2)=> t1.played_at > t2.played_at ? 1 : -1);
@@ -79,14 +72,6 @@ const getAllRecentlyPlayedByUser = async (user: User, spotifyApi: SpotifyWebApi)
     console.log(`gARPBU ERROR, ${JSON.stringify(e)}`);
     return "FAIL";
   }
-};
-
-const cleanTrack = (track: Track): Track => {
-  const cleanedTrack = track;
-  cleanedTrack.track.available_markets = ["US"];
-  cleanedTrack.track.album.available_markets = ["US"];
-
-  return cleanedTrack;
 };
 
 export const initializeSpotify = async (user: User) => {

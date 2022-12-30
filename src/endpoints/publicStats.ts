@@ -1,7 +1,7 @@
-import {addXDays, getDay, getMonth, getTimestamp, getXMinLater} from "./helpers";
-import {queries} from "./queries";
+import {addXDays, getDay, getMonth, getTimestamp, getXMinLater} from "../scripts/helpers";
+import {queries} from "../scripts/queries";
 import {firestore} from "firebase-admin";
-import {Session} from "./types";
+import {Session} from "../types";
 
 export function initAggregatedSessions(initDate: string) {
   console.log("initAggregatedSessions");

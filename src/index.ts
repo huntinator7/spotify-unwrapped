@@ -4,12 +4,13 @@ if (!getApps().length) {
   initializeApp();
 }
 
-import {getRecentListens, initializeSpotify} from "./spotify";
-import {createUser} from "./user";
+import {getRecentListens, initializeSpotify} from "./endpoints/plays";
+import {createUser} from "./endpoints/user";
+import {initCombineSessions} from "./endpoints/sessions";
+import {initAggregatedSessions} from "./endpoints/publicStats";
+
 import {User} from "./types";
-import {queries} from "./queries";
-import {initCombineSessions} from "./session";
-import {initAggregatedSessions} from "./publicStats";
+import {queries} from "./scripts/queries";
 
 
 exports.getListens = functions

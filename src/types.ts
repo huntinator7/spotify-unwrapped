@@ -9,6 +9,7 @@ export type User = {
   code_verifier: string;
   auth_code: string;
   redirect_uri: string;
+  collect_additional_info: boolean;
 }
 
 export type AccessTokenResponse = {

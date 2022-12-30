@@ -1,6 +1,6 @@
 import {firestore} from "firebase-admin";
 import {getEndTime} from "./helpers";
-import {Session, Track} from "./types";
+import {Session, Track} from "../types";
 const db = firestore();
 
 function getUser(userId: string) {
@@ -58,6 +58,8 @@ function createUser(userId: string) {
   return db.collection("User").doc(userId).set({
     created_date: new Date().toISOString(),
     last_updated: new Date().toISOString(),
+    public: false,
+    collect_additional_info: false,
   }, {merge: true});
 }
 
