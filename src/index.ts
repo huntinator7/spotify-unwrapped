@@ -79,3 +79,10 @@ exports.initAggregatedSessions = functions.https.onRequest(async (req, res) => {
     }
   }
 });
+
+exports.getNewAggregatedSessions = functions
+    .pubsub.schedule("1 0 * * *")
+    .timeZone("America/Denver")
+    .onRun(() => {
+      initAggregatedSessions(new Date(new Date().setHours(new Date().getHours() - 24)).toISOString());
+    });
