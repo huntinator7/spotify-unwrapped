@@ -10,6 +10,8 @@ export type User = {
   auth_code: string;
   redirect_uri: string;
   collect_additional_info: boolean;
+  total_listen_time_ms: number;
+  total_plays: number;
 }
 
 export type AccessTokenResponse = {
@@ -25,4 +27,20 @@ export type Session = {
   duration_ms: number;
 }
 
-export type Track = SpotifyApi.PlayHistoryObject;
+export type Song = SpotifyApi.TrackObjectFull;
+
+export type PlayResult = SpotifyApi.PlayHistoryObject & {
+  session?: firestore.DocumentReference;
+};
+
+export type Play = {
+  id: string;
+  name: string;
+  artists: {name: string; id: string}[];
+  album: {name: string; id: string; image: string;};
+  played_at: string;
+  duration_ms: number;
+  popularity: number;
+  session?: firestore.DocumentReference;
+  context?: any;
+}

@@ -1,5 +1,5 @@
 import {FieldValue, DocumentSnapshot, QueryDocumentSnapshot} from "firebase-admin/firestore";
-import {Session, Track, User} from "../types";
+import {Session, User, Play} from "../types";
 import {v4 as uuidv4} from "uuid";
 import {queries} from "../scripts/queries";
 import {getEndTime, getStartTime} from "../scripts/helpers";
@@ -16,10 +16,10 @@ export const calculateSessions = async (user: User) => {
 
   assignPlayToSession(latestSession);
   // func (session)
-  async function assignPlayToSession(session: DocumentSnapshot<Session>, lastPlayParam?: QueryDocumentSnapshot<Track>) {
+  async function assignPlayToSession(session: DocumentSnapshot<Session>, lastPlayParam?: QueryDocumentSnapshot<Play>) {
     const id = uuidv4();
     // console.log(`APTS: init, ${user.id}, ${session.id}, ${lastPlayParam?.id}`);
-    const lastPlay = lastPlayParam ?? await ((session.get("latest_play")).get()) as DocumentSnapshot<Track>;
+    const lastPlay = lastPlayParam ?? await ((session.get("latest_play")).get()) as DocumentSnapshot<Play>;
     // get the last play not analyzed (sort played_at asc, after last play reference)
     console.time("nextPlay " + id);
     const nextPlay = await queries.getNextPlay(user.id, lastPlay);
@@ -41,14 +41,14 @@ export const calculateSessions = async (user: User) => {
         play_references: FieldValue.arrayUnion(nextPlay.ref),
         latest_play: nextPlay.ref,
         end_time: new Date(getEndTime(nextPlay.data())).toISOString(),
-        duration_ms: FieldValue.increment(nextPlay.data().track.duration_ms),
+        duration_ms: FieldValue.increment(nextPlay.data().duration_ms),
       });
       console.timeEnd("updateSession " + id);
 
       assignPlayToSession(session, nextPlay);
     } else {
       console.time("createSession " + id);
-      const newSession = await queries.createSessionFromPLay(user.id, nextPlay);
+      const newSession = await queries.createSessionFromPlay(user.id, nextPlay);
       console.timeEnd("createSession " + id);
       //    add session reference to play
       console.time("addSession " + id);
@@ -64,7 +64,7 @@ export const calculateSessions = async (user: User) => {
 const initializeSessions = async (user: User) => {
   console.log("initializeSessions" + user.id);
   const firstPlay = await queries.getFirstPlay(user.id);
-  const newSession = await queries.createSessionFromPLay(user.id, firstPlay);
+  const newSession = await queries.createSessionFromPlay(user.id, firstPlay);
 
   await queries.updatePlay(user.id, firstPlay.id, {
     session: newSession,
@@ -108,3 +108,8 @@ export const combineSessions = async (user: User, laterSession: DocumentSnapshot
     combineSessions(user, earlierSession, newEarlierSession);
   }
 };
+
+export function repopulatePlaySessions(start = "2022-12-07", index = 0, limit = 10) {
+  // TODO: add sessions back in as references to listens before 1/3/2023
+  console.log(start, index, limit);
+}

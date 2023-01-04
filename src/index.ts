@@ -4,7 +4,7 @@ if (!getApps().length) {
   initializeApp();
 }
 
-import {getRecentListens, initializeSpotify} from "./endpoints/plays";
+import {getRecentListens, initializeSpotify, shrinkPlays} from "./endpoints/plays";
 import {createUser} from "./endpoints/user";
 import {initCombineSessions} from "./endpoints/sessions";
 import {initAggregatedSessions} from "./endpoints/publicStats";
@@ -87,3 +87,19 @@ exports.getNewAggregatedSessions = functions
     .onRun(() => {
       initAggregatedSessions(new Date(new Date().setHours(new Date().getHours() - 24)).toISOString());
     });
+
+exports.shrinkPlaysTest = functions.https.onRequest(async (req, res) => {
+  const key: string = await queries.getSecret("shrinkPlaysTest");
+  console.log(key, req.query.key, key === req.query.key);
+  if (req.query.key !== key) {
+    res.status(401).send("Not authorized: Incorrect key provided");
+  } else {
+    try {
+      shrinkPlays(req.query.start as string || undefined, 0, Number.parseInt(req.query.limit as string, 10) || undefined);
+      res.status(200).send("Success");
+    } catch (e) {
+      console.log("Error: " + JSON.stringify(e));
+      res.status(500).send("Error: " + JSON.stringify(e));
+    }
+  }
+});

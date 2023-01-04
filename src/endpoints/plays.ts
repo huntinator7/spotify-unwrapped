@@ -15,7 +15,7 @@ export const getRecentListens = async () => {
   getUserRecentListens(users.docs, 0, spotifyApi);
 };
 
-const getUserRecentListens = async (users: firestore.QueryDocumentSnapshot<firestore.DocumentData>[], i: number, spotifyApi: SpotifyWebApi) => {
+const getUserRecentListens = async (users: firestore.QueryDocumentSnapshot<User>[], i: number, spotifyApi: SpotifyWebApi) => {
   if (i >= users.length) return;
 
   const user = {...users[i].data(), id: users[i].id} as User;
@@ -42,27 +42,70 @@ const getUserRecentListens = async (users: firestore.QueryDocumentSnapshot<fires
 const getAllRecentlyPlayedByUser = async (user: User, spotifyApi: SpotifyWebApi): Promise<string> => {
   try {
     const mostRecent = await spotifyApi.getMyRecentlyPlayedTracks({limit: 15, after: parseInt(user.last_cursor ?? "0")});
-    console.timeEnd("getMostRecent " + user.id);
     if (mostRecent?.body?.items?.length) {
       const newRecentTracks = mostRecent?.body?.items?.map((t) => cleanTrack(t));
-      const sortedTracks = newRecentTracks.slice().sort((t1, t2)=> t1.played_at > t2.played_at ? 1 : -1);
+      const newPlays = newRecentTracks.map(({play}) => play);
 
-      console.time("sendTracksToDB " + user.id);
-      queries.doBatch(async (batch, db) => {
-        sortedTracks.forEach((track) => {
-          const ref = db.collection("User").doc(user.id).collection("Plays").doc();
-          batch.set(ref, track);
+      console.time("sendPlaysToDB " + user.id);
+      queries.transaction(async (tx, db) => {
+        const songRefs = newRecentTracks.map(({play, song}) => ({
+          play,
+          song,
+          album: song.album,
+          playRef: db.collection("User").doc(user.id).collection("Plays").doc(),
+          songRef: db.collection("Songs").doc(song.id),
+          albumRef: db.collection("Albums").doc(song.album.id),
+          userSongRef: db.collection("User").doc(user.id).collection("UserSongs").doc(song.id),
+          userAlbumRef: db.collection("User").doc(user.id).collection("UserAlbums").doc(song.id),
+        }));
+        const songRefRes = await Promise.all(songRefs.map(async (ref) => ({
+          ...ref,
+          songRes: await tx.get(ref.songRef),
+          albumRes: await tx.get(ref.albumRef),
+          userSongRes: await tx.get(ref.userSongRef),
+          userAlbumRes: await tx.get(ref.userAlbumRef),
+        })));
+        songRefRes.forEach((song) => {
+          if (song.userSongRes.exists) {
+            tx.update(song.userSongRef, {
+              listens: FieldValue.arrayUnion(song.playRef),
+            });
+          } else {
+            tx.set(song.userSongRef, {...song.song, uid: user.id, listens: [song.playRef]});
+          }
+          if (song.userAlbumRes.exists) {
+            tx.update(song.userAlbumRef, {
+              listens: FieldValue.arrayUnion(song.playRef),
+            });
+          } else {
+            tx.set(song.userAlbumRef, {...song.album, uid: user.id, listens: [song.playRef]});
+          }
+          if (song.songRes.exists) {
+            tx.update(song.songRef, {
+              listens: FieldValue.arrayUnion(song.playRef),
+            });
+          } else {
+            tx.set(song.songRef, {...song.song, listens: [song.playRef]});
+          }
+          if (song.albumRes.exists) {
+            tx.update(song.albumRef, {
+              listens: FieldValue.arrayUnion(song.playRef),
+            });
+          } else {
+            tx.set(song.albumRef, {...song.album, listens: [song.playRef]});
+          }
+          tx.set(song.playRef, song.play);
+        });
+        const userRef = db.collection("User").doc(user.id);
+        tx.update(userRef, {
+          last_updated: new Date().toISOString(),
+          total_listen_time_ms: FieldValue.increment(newPlays.map((t) => t.duration_ms).reduce((a, c) => a + c, 0)),
+          total_plays: FieldValue.increment(newPlays.length),
+          ...(newPlays.length ? {last_cursor: mostRecent.body.cursors.after} : {}),
         });
       });
-      console.timeEnd("sendTracksToDB " + user.id);
+      console.timeEnd("sendPlaysToDB " + user.id);
 
-      console.time("updateLastCursor " + user.id);
-      await queries.updateUserLastUpdated(
-          user.id,
-          new Date().toISOString(),
-        newRecentTracks.length ? {last_cursor: mostRecent.body.cursors.after} : {}
-      );
-      console.timeEnd("updateLastCursor " + user.id);
       calculateSessions(user);
       return "SUCCESS " + mostRecent?.body?.items?.length;
     }
@@ -90,3 +133,30 @@ export const initializeSpotify = async (user: User) => {
 
   getAllRecentlyPlayedByUser(user, spotifyApi);
 };
+
+export async function shrinkPlays(start = "2022-12-08", index = 0, limit = 10) {
+  console.time("getPlaysShrink" + index);
+  const querySnapshot = await queries.getPlaysShrink(start);
+  console.timeEnd("getPlaysShrink" + index);
+
+  console.time("batch" + index);
+  await queries.doBatch(async (batch, db) => {
+    querySnapshot.forEach(async (doc) => {
+      console.log(doc.id);
+      if (doc.data().track) {
+        console.log(`modifying ${doc.id}`);
+        // is old object, modify and create song
+        const {song, play} = cleanTrack(doc.data());
+        batch.set(doc.ref, play);
+        batch.set(db.collection("Songs").doc(song.id), song);
+      }
+    });
+  });
+  console.timeEnd("batch" + index);
+
+  index++;
+  if (index < limit) {
+    console.log(`calling again with ${index} starting ${querySnapshot.docs.at(-1)?.data().played_at}`);
+    shrinkPlays(querySnapshot.docs.at(-1)?.data().played_at, index, limit);
+  }
+}

@@ -1,6 +1,7 @@
+import {QuerySnapshot} from "firebase-admin/firestore";
 import {firestore} from "firebase-admin";
 import {getEndTime} from "./helpers";
-import {Session, Track} from "../types";
+import {Play, Session, Song, User} from "../types";
 const db = firestore();
 
 function getUser(userId: string) {
@@ -8,7 +9,7 @@ function getUser(userId: string) {
 }
 
 function getUsers() {
-  return db.collection("User").get();
+  return db.collection("User").get() as Promise<QuerySnapshot<User>>;
 }
 
 async function getSecret(secret: string) {
@@ -35,23 +36,27 @@ async function getNextSession(userId: string, lastSession: firestore.DocumentSna
       .get();
 }
 
-async function getNextPlay(userId: string, lastPlay: firestore.DocumentSnapshot<Track>) {
+async function getNextPlay(userId: string, lastPlay: firestore.DocumentSnapshot<Play>) {
   return (await db.collection("User").doc(userId).collection("Plays")
       .orderBy("played_at", "asc")
       .startAfter(lastPlay)
       .limit(1)
-      .get() as firestore.QuerySnapshot<Track>)?.docs[0];
+      .get() as firestore.QuerySnapshot<Play>)?.docs[0];
 }
 
 async function getFirstPlay(userId: string) {
   return (await db.collection("User").doc(userId).collection("Plays")
       .orderBy("played_at", "asc")
       .limit(1)
-      .get() as firestore.QuerySnapshot<Track>)?.docs[0];
+      .get() as firestore.QuerySnapshot<Play>)?.docs[0];
 }
 
 async function getSessionsInInterval(startTime: string, endTime: string) {
   return db.collectionGroup("Sessions").where("start_time", ">=", startTime).where("start_time", "<", endTime).get() as Promise<firestore.QuerySnapshot<Session>>;
+}
+
+async function getPlaysShrink(start: string) {
+  return db.collectionGroup("Plays").orderBy("played_at").startAfter(start).limit(20).get() as Promise<firestore.QuerySnapshot<any>>;
 }
 
 function createUser(userId: string) {
@@ -67,18 +72,22 @@ function createSession(userId: string, payload: Record<string, any>) {
   return db.collection("User").doc(userId).collection("Sessions").add(payload) as Promise<firestore.DocumentReference<Session>>;
 }
 
-function createSessionFromPLay(userId: string, play: firestore.QueryDocumentSnapshot<Track>) {
+function createSessionFromPlay(userId: string, play: firestore.QueryDocumentSnapshot<Play>) {
   return createSession(userId, {
     start_time: play.data().played_at,
     end_time: new Date(getEndTime(play.data())).toISOString(),
     play_references: firestore.FieldValue.arrayUnion(play.ref),
     latest_play: play.ref,
-    duration_ms: play.data().track.duration_ms,
+    duration_ms: play.data().duration_ms,
   });
 }
 
 function createAggSession(month: string, day: string, timestamps: Record<string, number>) {
   return db.collection("Aggregated").doc("NumSessions").collection(month).doc(day).set(timestamps);
+}
+
+function createSong(song: Song) {
+  return db.collection("Songs").doc(song.id).set(song);
 }
 
 function updateUser(userId: string, payload: Record<string, any>) {
@@ -110,10 +119,29 @@ function deleteSession(userId: string, sessionId: string) {
   return db.collection("User").doc(userId).collection("Sessions").doc(sessionId).delete();
 }
 
+function setPlay(userId: string, playId: string, play: Play) {
+  return db.collection("User").doc(userId).collection("Plays").doc(playId).set(play);
+}
+
+function setByRef(ref: firestore.DocumentReference, item: any) {
+  return ref.set(item);
+}
+
 async function doBatch(cb: (batch: firestore.WriteBatch, db: firestore.Firestore) => Promise<void>) {
   const batch = db.batch();
   await cb(batch, db);
   return batch.commit();
+}
+
+async function transaction(cb: (transaction: firestore.Transaction, db: firestore.Firestore) => Promise<void>) {
+  try {
+    return db.runTransaction(async (t) => {
+      await cb(t, db);
+    });
+  } catch (e) {
+    console.log("tx error", e);
+    return Promise.reject(e);
+  }
 }
 
 export const queries = {
@@ -127,15 +155,20 @@ export const queries = {
   getNextPlay,
   getFirstPlay,
   getSessionsInInterval,
+  getPlaysShrink,
   createUser,
   createSession,
-  createSessionFromPLay,
+  createSessionFromPlay,
   createAggSession,
+  createSong,
   updateUser,
   updateUserLastUpdated,
   updatePlay,
   updateSession,
   updateAggSession,
   deleteSession,
+  setPlay,
+  setByRef,
   doBatch,
+  transaction,
 };

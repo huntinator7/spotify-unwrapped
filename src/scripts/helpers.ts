@@ -1,13 +1,13 @@
-import {Track} from "../types";
+import {Play, PlayResult, Song} from "../types";
 
-export function getEndTime(track: Track | undefined): number {
-  return track ?
-      new Date(new Date(track.played_at).valueOf() + track.track.duration_ms).valueOf() :
+export function getEndTime(play: Play | undefined): number {
+  return play ?
+      new Date(new Date(play.played_at).valueOf() + play.duration_ms).valueOf() :
       0;
 }
 
-export function getStartTime(track: Track): number {
-  return new Date(track.played_at).valueOf();
+export function getStartTime(play: Play): number {
+  return new Date(play.played_at).valueOf();
 }
 
 export function getTimestamp(date: Date): string {
@@ -41,10 +41,34 @@ export function getXMinLater(d: Date, x: number): Date {
   return new Date(d.valueOf() + 1000 * 60 * x);
 }
 
-export function cleanTrack(track: Track): Track {
-  const cleanedTrack = track;
-  cleanedTrack.track.available_markets = ["US"];
-  cleanedTrack.track.album.available_markets = ["US"];
+export function trackToPlay(playRes: PlayResult): Play {
+  const p = playRes.track;
+  return {
+    id: p.id,
+    name: p.name,
+    artists: p.artists.map(({id, name}) => ({id, name})),
+    album: {
+      name: p.album.name,
+      id: p.album.id,
+      image: p.album.images[2].url,
+    },
+    played_at: playRes.played_at,
+    duration_ms: p.duration_ms,
+    popularity: p.popularity,
+    context: playRes.context,
+    session: playRes.session,
+  };
+}
 
-  return cleanedTrack;
+export function cleanTrack(playRes: PlayResult): {song: Song, play: Play} {
+  const cleanedTrack = playRes.track;
+  cleanedTrack.available_markets = ["US"];
+  cleanedTrack.album.available_markets = ["US"];
+
+  const play = trackToPlay(playRes);
+
+  return {
+    song: cleanedTrack,
+    play,
+  };
 }
