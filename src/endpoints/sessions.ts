@@ -25,8 +25,9 @@ export const calculateSessions = async (user: User) => {
     const nextPlay = await queries.getNextPlay(user.id, lastPlay);
     console.timeEnd("nextPlay " + id);
 
-    if (!nextPlay || !lastPlay) {
+    if (!nextPlay || !lastPlay || !nextPlay?.exists || !lastPlay?.exists) {
       console.timeEnd("calculateSessions " + user.id);
+      console.log(`doesn't exist', nextPlay ${nextPlay?.exists}, lastPlay ${lastPlay?.exists}`);
       return;
     }
 
@@ -52,9 +53,15 @@ export const calculateSessions = async (user: User) => {
       console.timeEnd("createSession " + id);
       //    add session reference to play
       console.time("addSession " + id);
-      await queries.updatePlay(user.id, nextPlay.id, {
-        session: newSession,
-      });
+      console.log(newSession?.path);
+      if (newSession) {
+        await queries.updatePlay(user.id, nextPlay.id, {
+          session: newSession,
+        });
+      } else {
+        console.log("no new sessions?");
+      }
+
       console.timeEnd("addSession " + id);
       assignPlayToSession(await newSession.get(), nextPlay);
     }

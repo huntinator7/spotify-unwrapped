@@ -1,4 +1,6 @@
+import * as functions from "firebase-functions";
 import {Play, PlayResult, Song} from "../types";
+import {queries} from "./queries";
 
 export function getEndTime(play: Play | undefined): number {
   return play ?
@@ -71,4 +73,22 @@ export function cleanTrack(playRes: PlayResult): {song: Song, play: Play} {
     song: cleanedTrack,
     play,
   };
+}
+
+export function createTestFunction(name: string, func: (req: functions.https.Request) => any) {
+  return functions.https.onRequest(async (req, res) => {
+    const key: string = await queries.getSecret(name);
+    console.log(key, req.query.key, key === req.query.key);
+    if (req.query.key !== key) {
+      res.status(401).send("Not authorized: Incorrect key provided");
+    } else {
+      try {
+        res.status(200).send("Success");
+        return func(req);
+      } catch (e) {
+        console.log("Error: " + JSON.stringify(e));
+        res.status(500).send("Error: " + JSON.stringify(e));
+      }
+    }
+  });
 }

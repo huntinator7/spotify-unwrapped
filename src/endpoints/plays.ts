@@ -2,7 +2,7 @@ import {firestore} from "firebase-admin";
 import {spotifyConfig} from "../config";
 import SpotifyWebApi from "spotify-web-api-node";
 import {User} from "../types";
-import {FieldValue} from "firebase-admin/firestore";
+import {FieldValue, getFirestore} from "firebase-admin/firestore";
 import {calculateSessions} from "./sessions";
 import {queries} from "../scripts/queries";
 import {cleanTrack} from "../scripts/helpers";
@@ -47,67 +47,84 @@ const getAllRecentlyPlayedByUser = async (user: User, spotifyApi: SpotifyWebApi)
       const newPlays = newRecentTracks.map(({play}) => play);
 
       console.time("sendPlaysToDB " + user.id);
-      queries.transaction(async (tx, db) => {
-        const songRefs = newRecentTracks.map(({play, song}) => ({
-          play,
-          song,
-          album: song.album,
-          playRef: db.collection("User").doc(user.id).collection("Plays").doc(),
-          songRef: db.collection("Songs").doc(song.id),
-          albumRef: db.collection("Albums").doc(song.album.id),
-          userSongRef: db.collection("User").doc(user.id).collection("UserSongs").doc(song.id),
-          userAlbumRef: db.collection("User").doc(user.id).collection("UserAlbums").doc(song.id),
-        }));
-        const songRefRes = await Promise.all(songRefs.map(async (ref) => ({
-          ...ref,
-          songRes: await tx.get(ref.songRef),
-          albumRes: await tx.get(ref.albumRef),
-          userSongRes: await tx.get(ref.userSongRef),
-          userAlbumRes: await tx.get(ref.userAlbumRef),
-        })));
-        songRefRes.forEach((song) => {
-          if (song.userSongRes.exists) {
-            tx.update(song.userSongRef, {
-              listens: FieldValue.arrayUnion(song.playRef),
-            });
-          } else {
-            tx.set(song.userSongRef, {...song.song, uid: user.id, listens: [song.playRef]});
-          }
-          if (song.userAlbumRes.exists) {
-            tx.update(song.userAlbumRef, {
-              listens: FieldValue.arrayUnion(song.playRef),
-            });
-          } else {
-            tx.set(song.userAlbumRef, {...song.album, uid: user.id, listens: [song.playRef]});
-          }
-          if (song.songRes.exists) {
-            tx.update(song.songRef, {
-              listens: FieldValue.arrayUnion(song.playRef),
-            });
-          } else {
-            tx.set(song.songRef, {...song.song, listens: [song.playRef]});
-          }
-          if (song.albumRes.exists) {
-            tx.update(song.albumRef, {
-              listens: FieldValue.arrayUnion(song.playRef),
-            });
-          } else {
-            tx.set(song.albumRef, {...song.album, listens: [song.playRef]});
-          }
-          tx.set(song.playRef, song.play);
+      const db = getFirestore();
+      try {
+        await db.runTransaction(async (tx) => {
+          const songRefs = newRecentTracks.map(({play, song}) => ({
+            play,
+            song,
+            album: song.album,
+            playRef: db.collection("User").doc(user.id).collection("Plays").doc(),
+            songRef: db.collection("Songs").doc(song.id),
+            albumRef: db.collection("Albums").doc(song.album.id),
+            userSongRef: db.collection("User").doc(user.id).collection("UserSongs").doc(song.id),
+            userAlbumRef: db.collection("User").doc(user.id).collection("UserAlbums").doc(song.album.id),
+          }));
+          const songRefRes = await Promise.all(songRefs.map(async (ref) => ({
+            ...ref,
+            songRes: await tx.get(ref.songRef),
+            albumRes: await tx.get(ref.albumRef),
+            userSongRes: await tx.get(ref.userSongRef),
+            userAlbumRes: await tx.get(ref.userAlbumRef),
+          })));
+          songRefRes.forEach((song) => {
+            if (song.userSongRes?.exists) {
+              console.log("user song exists", song.userSongRes.id);
+              tx.update(song.userSongRef, {
+                listens: FieldValue.arrayUnion(song.playRef),
+              });
+            } else {
+              console.log(`user song doesn't exist, creating ${song.userSongRef.path}`);
+              tx.set(song.userSongRef, {...song.song, uid: user.id, listens: [song.playRef]});
+            }
+            if (song.userAlbumRes?.exists) {
+              console.log("user album exists", song.userSongRes.id);
+              tx.update(song.userAlbumRef, {
+                listens: FieldValue.arrayUnion(song.playRef),
+              });
+            } else {
+              console.log(`user album doesn't exist, creating ${song.userAlbumRef.path}`);
+              tx.set(song.userAlbumRef, {...song.album, uid: user.id, listens: [song.playRef]});
+            }
+            if (song.songRes?.exists) {
+              console.log("song exists", song.userSongRes.id);
+              tx.update(song.songRef, {
+                listens: FieldValue.arrayUnion(song.playRef),
+              });
+            } else {
+              console.log(`song doesn't exist, creating ${song.songRef.path}`);
+              tx.set(song.songRef, {...song.song, listens: [song.playRef]});
+            }
+            if (song.albumRes?.exists) {
+              console.log("album exists", song.userSongRes.id);
+              tx.update(song.albumRef, {
+                listens: FieldValue.arrayUnion(song.playRef),
+              });
+            } else {
+              console.log(`album doesn't exist, creating ${song.albumRef.path}`);
+              tx.set(song.albumRef, {...song.album, listens: [song.playRef]});
+            }
+            console.log(`creating play ${song.playRef.path}`);
+            tx.set(song.playRef, song.play);
+          });
+          const userRef = db.collection("User").doc(user.id);
+          console.log(`updating user ${userRef.path}`);
+          console.log(`updating user ${userRef.path}`);
+          tx.update(userRef, {
+            last_updated: new Date().toISOString(),
+            total_listen_time_ms: FieldValue.increment(newPlays.map((t) => t.duration_ms).reduce((a, c) => a + c, 0)),
+            total_plays: FieldValue.increment(newPlays.length),
+            ...(newPlays.length ? {last_cursor: mostRecent.body.cursors.after} : {}),
+          });
         });
-        const userRef = db.collection("User").doc(user.id);
-        tx.update(userRef, {
-          last_updated: new Date().toISOString(),
-          total_listen_time_ms: FieldValue.increment(newPlays.map((t) => t.duration_ms).reduce((a, c) => a + c, 0)),
-          total_plays: FieldValue.increment(newPlays.length),
-          ...(newPlays.length ? {last_cursor: mostRecent.body.cursors.after} : {}),
-        });
-      });
-      console.timeEnd("sendPlaysToDB " + user.id);
-
-      calculateSessions(user);
-      return "SUCCESS " + mostRecent?.body?.items?.length;
+        calculateSessions(user);
+        console.timeEnd("sendPlaysToDB " + user.id);
+        return "SUCCESS " + mostRecent?.body?.items?.length;
+      } catch (e) {
+        console.log("tx error", e);
+        Promise.reject(e);
+        return "FAIL";
+      }
     }
     calculateSessions(user);
     return "SUCCESS NONE";
