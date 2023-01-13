@@ -1,4 +1,5 @@
-import * as functions from "firebase-functions";
+import * as functions from "firebase-functions/v1";
+import {onMessagePublished} from "firebase-functions/v2/pubsub";
 import {firestore} from "firebase-admin";
 import {getApps, initializeApp} from "firebase-admin/app";
 if (!getApps().length) {
@@ -8,11 +9,14 @@ if (!getApps().length) {
   });
 }
 
-import {getRecentListens, initializeSpotify, shrinkPlays} from "./endpoints/plays";
+import {
+  getRecentListens,
+  initializeSpotify,
+} from "./endpoints/plays";
 import {createUser} from "./endpoints/user";
 import {initCombineSessions} from "./endpoints/sessions";
 import {initAggregatedSessions} from "./endpoints/publicStats";
-import {populateUserSongs} from "./endpoints/songs";
+import {populateSongAlbumListens, populateUserSongs} from "./endpoints/songs";
 
 import {User} from "./types";
 import {queries} from "./scripts/queries";
@@ -21,7 +25,13 @@ import {createTestFunction} from "./scripts/helpers";
 exports.getListens = functions
     .pubsub.schedule("0,15,30,45 * * * *")
     .timeZone("America/Denver")
-    .onRun(getRecentListens);
+    .onRun(async () => {
+      console.time("getListensPubSub");
+      const x = await getRecentListens();
+      console.timeEnd("getListensPubSub");
+      console.log("x:", x);
+      return x;
+    });
 
 exports.createUser = functions.auth.user().onCreate(createUser);
 
@@ -45,19 +55,12 @@ exports.getNewAggregatedSessions = functions
       initAggregatedSessions(new Date(new Date().setHours(new Date().getHours() - 24)).toISOString());
     });
 
-exports.getListensManual = createTestFunction("listensManualKey", () => getRecentListens());
+exports["populatesongalbumlistens"] = onMessagePublished("populatesongalbumlistens", () => populateSongAlbumListens());
 
-exports.combineSessionsManual = createTestFunction("combineSessionsManual", () => initCombineSessions());
+exports["getlistensmanual"] = createTestFunction("listensManualKey", () => getRecentListens());
 
-exports.initAggregatedSessions = createTestFunction("initAggregatedSessions", (req) => initAggregatedSessions(req.query.date as string));
+exports["combinesessionsmanual"] = createTestFunction("combineSessionsManual", () => initCombineSessions());
 
-exports.shrinkPlaysTest = createTestFunction("shrinkPlaysTest", (req) => shrinkPlays(req.query.start as string || undefined, 0, Number.parseInt(req.query.limit as string, 10) || undefined));
+exports["initaggregatedsessions"] = createTestFunction("initAggregatedSessions", (data) => initAggregatedSessions(data.date as string));
 
-exports.populateUserSongsTest = functions.https.onCall(async (data, context) => {
-  const key: string = await queries.getSecret("populateUserSongsTest");
-  if (data.key !== key) {
-    return {error: "bad key"};
-  } else {
-    return populateUserSongs();
-  }
-});
+exports["populateusersongs"] = createTestFunction("populateUserSongsTest", () => populateUserSongs());
