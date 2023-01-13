@@ -1,11 +1,10 @@
-import {QuerySnapshot} from "firebase-admin/firestore";
-import {firestore} from "firebase-admin";
+import {Firestore, getFirestore, QuerySnapshot, DocumentSnapshot, DocumentReference, QueryDocumentSnapshot, FieldValue, UpdateData, WriteBatch, Transaction} from "firebase-admin/firestore";
 import {getEndTime} from "./helpers";
-import {Play, Session, Song, User} from "../types";
-const db = firestore();
+import {Album, Play, Session, Song, User} from "../types";
+const db = getFirestore();
 
 function getUser(userId: string) {
-  return db.collection("User").doc(userId).get();
+  return db.collection("User").doc(userId).get() as Promise<QueryDocumentSnapshot<User>>;
 }
 
 function getUsers() {
@@ -28,7 +27,7 @@ async function getLatestSession(userId: string) {
   return db.collection("User").doc(userId).collection("Sessions").orderBy("end_time", "desc").limit(1).get();
 }
 
-async function getNextSession(userId: string, lastSession: firestore.DocumentSnapshot<Session>) {
+async function getNextSession(userId: string, lastSession: DocumentSnapshot<Session>) {
   return db.collection("User").doc(userId).collection("Sessions")
       .orderBy("end_time", "desc")
       .startAfter(lastSession)
@@ -36,27 +35,63 @@ async function getNextSession(userId: string, lastSession: firestore.DocumentSna
       .get();
 }
 
-async function getNextPlay(userId: string, lastPlay: firestore.DocumentSnapshot<Play>) {
+async function getSongs() {
+  return db.collection("Songs").get() as Promise<QuerySnapshot<Song>>;
+}
+
+async function getAlbums() {
+  return db.collection("Albums").get() as Promise<QuerySnapshot<Album>>;
+}
+
+async function getUserSongs(userId: string) {
+  return db.collection("User").doc(userId).collection("UserSongs").get() as Promise<QuerySnapshot<Song>>;
+}
+
+async function getAllUserSongs() {
+  return db.collectionGroup("UserSongs").get() as Promise<QuerySnapshot<Song>>;
+}
+
+async function getUserAlbums(userId: string) {
+  return db.collection("User").doc(userId).collection("UserAlbums").get() as Promise<QuerySnapshot<Song>>;
+}
+
+async function getAllUserAlbums() {
+  return db.collectionGroup("UserAlbums").get() as Promise<QuerySnapshot<Album>>;
+}
+
+async function getPlays(userId: string) {
+  return db.collection("User").doc(userId).collection("Plays").get() as Promise<QuerySnapshot<Play>>;
+}
+
+async function getAllPlays() {
+  return db.collectionGroup("Plays").get() as Promise<QuerySnapshot<Play>>;
+}
+
+async function getNextPlay(userId: string, lastPlay: DocumentSnapshot<Play>) {
   return (await db.collection("User").doc(userId).collection("Plays")
       .orderBy("played_at", "asc")
       .startAfter(lastPlay)
       .limit(1)
-      .get() as firestore.QuerySnapshot<Play>)?.docs[0];
+      .get() as QuerySnapshot<Play>)?.docs[0];
 }
 
 async function getFirstPlay(userId: string) {
   return (await db.collection("User").doc(userId).collection("Plays")
       .orderBy("played_at", "asc")
       .limit(1)
-      .get() as firestore.QuerySnapshot<Play>)?.docs[0];
+      .get() as QuerySnapshot<Play>)?.docs[0];
+}
+
+async function getPlaysBefore(userId: string, before: string) {
+  return db.collection("User").doc(userId).collection("Plays").where("played_at", "<=", before).get() as Promise<QuerySnapshot<Play>>;
 }
 
 async function getSessionsInInterval(startTime: string, endTime: string) {
-  return db.collectionGroup("Sessions").where("start_time", ">=", startTime).where("start_time", "<", endTime).get() as Promise<firestore.QuerySnapshot<Session>>;
+  return db.collectionGroup("Sessions").where("start_time", ">=", startTime).where("start_time", "<", endTime).get() as Promise<QuerySnapshot<Session>>;
 }
 
 async function getPlaysShrink(start: string) {
-  return db.collectionGroup("Plays").orderBy("played_at").startAfter(start).limit(20).get() as Promise<firestore.QuerySnapshot<any>>;
+  return db.collectionGroup("Plays").orderBy("played_at").startAfter(start).limit(20).get() as Promise<QuerySnapshot<Play>>;
 }
 
 function createUser(userId: string) {
@@ -69,14 +104,14 @@ function createUser(userId: string) {
 }
 
 function createSession(userId: string, payload: Record<string, any>) {
-  return db.collection("User").doc(userId).collection("Sessions").add(payload) as Promise<firestore.DocumentReference<Session>>;
+  return db.collection("User").doc(userId).collection("Sessions").add(payload) as Promise<DocumentReference<Session>>;
 }
 
-function createSessionFromPlay(userId: string, play: firestore.QueryDocumentSnapshot<Play>) {
+function createSessionFromPlay(userId: string, play: QueryDocumentSnapshot<Play>) {
   return createSession(userId, {
     start_time: play.data().played_at,
     end_time: new Date(getEndTime(play.data())).toISOString(),
-    play_references: firestore.FieldValue.arrayUnion(play.ref),
+    play_references: FieldValue.arrayUnion(play.ref),
     latest_play: play.ref,
     duration_ms: play.data().duration_ms,
   });
@@ -98,7 +133,7 @@ function updatePlay(userId: string, playId: string, payload: Record<string, any>
   return db.collection("User").doc(userId).collection("Plays").doc(playId).update(payload);
 }
 
-function updateSession(userId: string, sessionId: string, payload: firestore.UpdateData) {
+function updateSession(userId: string, sessionId: string, payload: UpdateData) {
   return db.collection("User").doc(userId).collection("Sessions").doc(sessionId).update(payload);
 }
 
@@ -123,20 +158,24 @@ function setPlay(userId: string, playId: string, play: Play) {
   return db.collection("User").doc(userId).collection("Plays").doc(playId).set(play);
 }
 
-function setByRef(ref: firestore.DocumentReference, item: any) {
+function setByRef(ref: DocumentReference, item: any) {
   return ref.set(item);
 }
 
-async function doBatch(cb: (batch: firestore.WriteBatch, db: firestore.Firestore) => Promise<void>) {
+function updateByRef(ref: DocumentReference, update: any) {
+  return ref.update(update);
+}
+
+async function doBatch(cb: (batch: WriteBatch, db: Firestore) => Promise<void>) {
   const batch = db.batch();
   await cb(batch, db);
   return batch.commit();
 }
 
-async function transaction(cb: (transaction: firestore.Transaction, db: firestore.Firestore) => Promise<void>) {
+async function transaction(cb: (transaction: Transaction, db: Firestore) => Promise<void>) {
   try {
     return db.runTransaction(async (t) => {
-      await cb(t, db);
+      cb(t, db);
     });
   } catch (e) {
     console.log("tx error", e);
@@ -152,8 +191,17 @@ export const queries = {
   getSessions,
   getNextSession,
   getLatestSession,
+  getSongs,
+  getAlbums,
+  getUserSongs,
+  getAllUserSongs,
+  getUserAlbums,
+  getAllUserAlbums,
+  getPlays,
+  getAllPlays,
   getNextPlay,
   getFirstPlay,
+  getPlaysBefore,
   getSessionsInInterval,
   getPlaysShrink,
   createUser,
@@ -169,6 +217,7 @@ export const queries = {
   deleteSession,
   setPlay,
   setByRef,
+  updateByRef,
   doBatch,
   transaction,
 };

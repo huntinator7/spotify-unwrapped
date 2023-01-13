@@ -1,4 +1,6 @@
+import {onCall} from "firebase-functions/v2/https";
 import {Play, PlayResult, Song} from "../types";
+import {queries} from "./queries";
 
 export function getEndTime(play: Play | undefined): number {
   return play ?
@@ -30,11 +32,11 @@ export function addXDays(d: Date, x: number): Date {
 }
 
 export function getMonth(d: Date): string {
-  return (d.getMonth() + 1).toString();
+  return (numTo2Digit(d.getMonth() + 1)).toString();
 }
 
 export function getDay(d: Date): string {
-  return `${getMonth(d)}-${d.getDate()}`;
+  return `${getMonth(d)}-${numTo2Digit(d.getDate())}`;
 }
 
 export function getXMinLater(d: Date, x: number): Date {
@@ -60,7 +62,7 @@ export function trackToPlay(playRes: PlayResult): Play {
   };
 }
 
-export function cleanTrack(playRes: PlayResult): {song: Song, play: Play} {
+export function cleanTrack(playRes: PlayResult, userId: string): {song: Song, play: Play} {
   const cleanedTrack = playRes.track;
   cleanedTrack.available_markets = ["US"];
   cleanedTrack.album.available_markets = ["US"];
@@ -68,7 +70,26 @@ export function cleanTrack(playRes: PlayResult): {song: Song, play: Play} {
   const play = trackToPlay(playRes);
 
   return {
-    song: cleanedTrack,
+    song: {
+      ...cleanedTrack,
+      uid: userId,
+      listens: [],
+      listen_count: 0,
+    },
     play,
   };
+}
+
+export function createTestFunction(name: string, func: (data: any) => any) {
+  return onCall(async (request) => {
+    console.log("here in " + name);
+    const key: string = await queries.getSecret(name);
+    if (request.data.key !== key) {
+      throw new Error("Key did not match");
+    } else {
+      func(request.data);
+      console.log("here");
+      return {result: "probably a success"};
+    }
+  });
 }
