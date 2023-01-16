@@ -37,6 +37,8 @@ export type Song = SpotifyApi.TrackObjectFull & ListenInfo;
 
 export type Album = SpotifyApi.AlbumObjectSimplified & ListenInfo;
 
+export type Artist = SpotifyApi.ArtistObjectSimplified & ListenInfo;
+
 export type PlayResult = SpotifyApi.PlayHistoryObject & {
   session?: firestore.DocumentReference;
 };

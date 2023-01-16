@@ -31,33 +31,6 @@ async function getUserRecentListens(users: firestore.QueryDocumentSnapshot<User>
   }));
 }
 
-// const getUserRecentListens = async (users: firestore.QueryDocumentSnapshot<User>[], i: number, spotifyApi: SpotifyWebApi) => {
-//   if (i >= users.length) return "done3";
-
-//   const user = {...users[i].data(), id: users[i].id} as User;
-//   console.log(`gURL USER ${i} ${user.id}}`);
-
-//   if (!user.refresh_token) {
-//     console.log(`gURL NO TOKEN, ${user.id}`);
-//     getUserRecentListens(users, i + 1, spotifyApi);
-//     return user.id;
-//   } else {
-//     try {
-//       spotifyApi.setRefreshToken(user.refresh_token);
-//       const accessTokenRes = await spotifyApi.refreshAccessToken();
-//       spotifyApi.setAccessToken(accessTokenRes.body.access_token);
-
-//       await getAllRecentlyPlayedByUser(user, spotifyApi);
-//       getUserRecentListens(users, i + 1, spotifyApi);
-//       return "done";
-//     } catch (e) {
-//       console.log(`gURL ERROR, ${JSON.stringify(e)}`);
-//       getUserRecentListens(users, i + 1, spotifyApi);
-//       return "done2";
-//     }
-//   }
-// };
-
 async function getAllRecentlyPlayedByUser(user: User, spotifyApi: SpotifyWebApi): Promise<string> {
   try {
     const mostRecent = await spotifyApi.getMyRecentlyPlayedTracks({limit: 15, after: parseInt(user.last_cursor ?? "0")});
@@ -73,18 +46,23 @@ async function getAllRecentlyPlayedByUser(user: User, spotifyApi: SpotifyWebApi)
             play,
             song,
             album: song.album,
+            artists: song.artists,
             playRef: db.collection("User").doc(user.id).collection("Plays").doc(),
             songRef: db.collection("Songs").doc(song.id),
             albumRef: db.collection("Albums").doc(song.album.id),
+            artistRefs: song.artists.map((artist) => db.collection("Artists").doc(artist.id)),
             userSongRef: db.collection("User").doc(user.id).collection("UserSongs").doc(song.id),
             userAlbumRef: db.collection("User").doc(user.id).collection("UserAlbums").doc(song.album.id),
+            userArtistRefs: song.artists.map((artist) => db.collection("User").doc(user.id).collection("UserArtists").doc(artist.id)),
           }));
           const songRefRes = await Promise.all(songRefs.map(async (ref) => ({
             ...ref,
             songRes: await tx.get(ref.songRef),
             albumRes: await tx.get(ref.albumRef),
+            artistsRes: await Promise.all(ref.artistRefs.map((r) => (tx.get(r)))),
             userSongRes: await tx.get(ref.userSongRef),
             userAlbumRes: await tx.get(ref.userAlbumRef),
+            userArtistsRes: await Promise.all(ref.userArtistRefs.map((r) => tx.get(r))),
           })));
           songRefRes.forEach((song) => {
             if (song.userSongRes?.exists) {
@@ -103,6 +81,22 @@ async function getAllRecentlyPlayedByUser(user: User, spotifyApi: SpotifyWebApi)
             } else {
               tx.set(song.userAlbumRef, {...song.album, uid: user.id, listens: [song.playRef], listen_count: 1});
             }
+            song.userArtistsRes.forEach((userArtistRes) => {
+              const userArtistRef = song.userArtistRefs.find((r) => r.id === userArtistRes.id);
+              if (!userArtistRef) {
+                console.log("userArtistRef not found: " + userArtistRes?.id);
+                return;
+              }
+              if (userArtistRes?.exists) {
+                tx.update(userArtistRef, {
+                  listens: FieldValue.arrayUnion(song.playRef),
+                  listen_count: FieldValue.increment(1),
+                });
+              } else {
+                const artist = song.artists.find((a) => a.id === userArtistRef.id);
+                tx.set(userArtistRef, {...artist, listens: [song.playRef], listen_count: 1});
+              }
+            });
             if (song.songRes?.exists) {
               tx.update(song.songRef, {
                 listens: FieldValue.arrayUnion(song.playRef),
@@ -119,6 +113,22 @@ async function getAllRecentlyPlayedByUser(user: User, spotifyApi: SpotifyWebApi)
             } else {
               tx.set(song.albumRef, {...song.album, listens: [song.playRef], listen_count: 1});
             }
+            song.artistsRes.forEach((artistRes) => {
+              const artistRef = song.artistRefs.find((r) => r.id === artistRes.id);
+              if (!artistRef) {
+                console.log("artistRef not found: " + artistRes?.id);
+                return;
+              }
+              if (artistRes?.exists) {
+                tx.update(artistRef, {
+                  listens: FieldValue.arrayUnion(song.playRef),
+                  listen_count: FieldValue.increment(1),
+                });
+              } else {
+                const artist = song.artists.find((a) => a.id === artistRef.id);
+                tx.set(artistRef, {...artist, listens: [song.playRef], listen_count: 1});
+              }
+            });
             tx.set(song.playRef, song.play);
           });
           const userRef = db.collection("User").doc(user.id);
@@ -162,30 +172,3 @@ export async function initializeSpotify(user: User) {
 
   getAllRecentlyPlayedByUser(user, spotifyApi);
 }
-
-// export async function shrinkPlays(start = "2022-12-08", index = 0, limit = 10) {
-//   console.time("getPlaysShrink" + index);
-//   const querySnapshot = await queries.getPlaysShrink(start);
-//   console.timeEnd("getPlaysShrink" + index);
-
-//   console.time("batch" + index);
-//   await queries.doBatch(async (batch, db) => {
-//     querySnapshot.forEach(async (doc) => {
-//       console.log(doc.id);
-//       if ((doc.data() as any).track) {
-//         console.log(`modifying ${doc.id}`);
-//         // is old object, modify and create song
-//         const {song, play} = cleanTrack(doc.data());
-//         batch.set(doc.ref, play);
-//         batch.set(db.collection("Songs").doc(song.id), song);
-//       }
-//     });
-//   });
-//   console.timeEnd("batch" + index);
-
-//   index++;
-//   if (index < limit) {
-//     console.log(`calling again with ${index} starting ${querySnapshot.docs.at(-1)?.data().played_at}`);
-//     shrinkPlays(querySnapshot.docs.at(-1)?.data().played_at, index, limit);
-//   }
-// }

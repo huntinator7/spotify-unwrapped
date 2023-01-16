@@ -1,6 +1,6 @@
 import {Firestore, getFirestore, QuerySnapshot, DocumentSnapshot, DocumentReference, QueryDocumentSnapshot, FieldValue, UpdateData, WriteBatch, Transaction} from "firebase-admin/firestore";
 import {getEndTime} from "./helpers";
-import {Album, Play, Session, Song, User} from "../types";
+import {Album, Artist, Play, Session, Song, User} from "../types";
 const db = getFirestore();
 
 function getUser(userId: string) {
@@ -43,6 +43,10 @@ async function getAlbums() {
   return db.collection("Albums").get() as Promise<QuerySnapshot<Album>>;
 }
 
+async function getArtists() {
+  return db.collection("Artists").get() as Promise<QuerySnapshot<Album>>;
+}
+
 async function getUserSongs(userId: string) {
   return db.collection("User").doc(userId).collection("UserSongs").get() as Promise<QuerySnapshot<Song>>;
 }
@@ -57,6 +61,10 @@ async function getUserAlbums(userId: string) {
 
 async function getAllUserAlbums() {
   return db.collectionGroup("UserAlbums").get() as Promise<QuerySnapshot<Album>>;
+}
+
+async function getUserArtists(userId: string) {
+  return db.collection("User").doc(userId).collection("UserArtists").get() as Promise<QuerySnapshot<Play>>;
 }
 
 async function getPlays(userId: string) {
@@ -154,6 +162,14 @@ function deleteSession(userId: string, sessionId: string) {
   return db.collection("User").doc(userId).collection("Sessions").doc(sessionId).delete();
 }
 
+function setArtist(artistId: string, artist: Artist) {
+  return db.collection("Artists").doc(artistId).set(artist);
+}
+
+function setUserArtist(userId: string, artistId: string, artist: Artist) {
+  return db.collection("User").doc(userId).collection("UserArtists").doc(artistId).set(artist);
+}
+
 function setPlay(userId: string, playId: string, play: Play) {
   return db.collection("User").doc(userId).collection("Plays").doc(playId).set(play);
 }
@@ -193,10 +209,12 @@ export const queries = {
   getLatestSession,
   getSongs,
   getAlbums,
+  getArtists,
   getUserSongs,
   getAllUserSongs,
   getUserAlbums,
   getAllUserAlbums,
+  getUserArtists,
   getPlays,
   getAllPlays,
   getNextPlay,
@@ -215,6 +233,8 @@ export const queries = {
   updateSession,
   updateAggSession,
   deleteSession,
+  setArtist,
+  setUserArtist,
   setPlay,
   setByRef,
   updateByRef,

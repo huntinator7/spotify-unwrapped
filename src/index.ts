@@ -16,11 +16,11 @@ import {
 import {createUser} from "./endpoints/user";
 import {initCombineSessions} from "./endpoints/sessions";
 import {initAggregatedSessions} from "./endpoints/publicStats";
-import {populateSongAlbumListens, populateUserSongs} from "./endpoints/songs";
 
 import {User} from "./types";
 import {queries} from "./scripts/queries";
 import {createTestFunction} from "./scripts/helpers";
+import {populatUserArtists} from "./endpoints/oneoff";
 
 exports.getListens = functions
     .pubsub.schedule("0,15,30,45 * * * *")
@@ -55,12 +55,10 @@ exports.getNewAggregatedSessions = functions
       initAggregatedSessions(new Date(new Date().setHours(new Date().getHours() - 24)).toISOString());
     });
 
-exports["populatesongalbumlistens"] = onMessagePublished("populatesongalbumlistens", () => populateSongAlbumListens());
-
 exports["getlistensmanual"] = createTestFunction("listensManualKey", () => getRecentListens());
 
 exports["combinesessionsmanual"] = createTestFunction("combineSessionsManual", () => initCombineSessions());
 
 exports["initaggregatedsessions"] = createTestFunction("initAggregatedSessions", (data) => initAggregatedSessions(data.date as string));
 
-exports["populateusersongs"] = createTestFunction("populateUserSongsTest", () => populateUserSongs());
+exports["populateartists"] = onMessagePublished("populateartists", () => populatUserArtists());
