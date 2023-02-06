@@ -76,10 +76,6 @@ export async function populatUserArtists() {
   }).flat());
 }
 
-export async function addSongListensToUser() {
-  // TODO: this
-}
-
 export async function addSongsToArtist() {
   // TODO: this
 }
