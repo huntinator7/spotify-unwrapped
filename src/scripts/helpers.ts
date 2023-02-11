@@ -1,5 +1,7 @@
 import {onCall} from "firebase-functions/v2/https";
-import {Play, PlayResult, Song} from "../types";
+import SpotifyWebApi from "spotify-web-api-node";
+import {spotifyConfig} from "../config";
+import {Play, PlayResult, Song, User} from "../types";
 import {queries} from "./queries";
 
 export function getEndTime(play: Play | undefined): number {
@@ -41,6 +43,14 @@ export function getDay(d: Date): string {
 
 export function getXMinLater(d: Date, x: number): Date {
   return new Date(d.valueOf() + 1000 * 60 * x);
+}
+
+export function getDays(year: number, month: number) {
+  return new Date(year, month, 0).getDate();
+}
+
+export function getDateOfMonth(date: string) {
+  return new Date(date).getDate();
 }
 
 export function trackToPlay(playRes: PlayResult): Play {
@@ -92,4 +102,28 @@ export function createTestFunction(name: string, func: (data: any) => any) {
       return {result: "probably a success"};
     }
   });
+}
+
+export const monthNames = [
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
+];
+
+export async function getSpotifyApi(user: User): Promise<SpotifyWebApi> {
+  const spotifyApi = new SpotifyWebApi(spotifyConfig());
+  spotifyApi.setRefreshToken(user.refresh_token);
+  const accessTokenRes = await spotifyApi.refreshAccessToken();
+  spotifyApi.setAccessToken(accessTokenRes.body.access_token);
+
+  return spotifyApi;
 }

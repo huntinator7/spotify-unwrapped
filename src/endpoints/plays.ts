@@ -5,7 +5,7 @@ import {User} from "../types";
 import {FieldValue, getFirestore} from "firebase-admin/firestore";
 import {calculateSessions} from "./sessions";
 import {queries} from "../scripts/queries";
-import {cleanTrack} from "../scripts/helpers";
+import {cleanTrack, getSpotifyApi} from "../scripts/helpers";
 
 export async function getRecentListens() {
   console.log("getRecentListens", new Date().toDateString());
@@ -21,10 +21,7 @@ async function getUserRecentListens(users: firestore.QueryDocumentSnapshot<User>
       return Promise.resolve(`${u.id}: "No token"`);
     }
 
-    const spotifyApi = new SpotifyWebApi(spotifyConfig());
-    spotifyApi.setRefreshToken(user.refresh_token);
-    const accessTokenRes = await spotifyApi.refreshAccessToken();
-    spotifyApi.setAccessToken(accessTokenRes.body.access_token);
+    const spotifyApi = await getSpotifyApi(user);
 
     const res = await getAllRecentlyPlayedByUser(user, spotifyApi);
     return `${u.id}: ${res}`;

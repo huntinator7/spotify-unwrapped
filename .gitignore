@@ -108,3 +108,4 @@ lib/**/*.js
 lib/**/*.js.map
 
 src/config.ts
+src/local.ts

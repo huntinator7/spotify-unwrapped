@@ -27,7 +27,7 @@ export type Session = {
   duration_ms: number;
 }
 
-type ListenInfo = {
+export type ListenInfo = {
   uid?: string;
   listens: firestore.DocumentReference[];
   listen_count?: number;
@@ -38,6 +38,8 @@ export type Song = SpotifyApi.TrackObjectFull & ListenInfo;
 export type Album = SpotifyApi.AlbumObjectSimplified & ListenInfo;
 
 export type Artist = SpotifyApi.ArtistObjectSimplified & ListenInfo;
+
+export type ArtistFull = SpotifyApi.ArtistObjectFull & ListenInfo;
 
 export type PlayResult = SpotifyApi.PlayHistoryObject & {
   session?: firestore.DocumentReference;
@@ -53,5 +55,23 @@ export type Play = {
   popularity: number;
   session?: firestore.DocumentReference;
   context?: any;
+}
+
+export type Month = {
+  id: number;
+  total_listen_time_ms: number;
+  total_plays: number;
+  total_songs: number;
+  total_albums: number;
+  total_artists: number;
+  avg_minutes_per_day: number;
+  most_listened_song: Song;
+  most_listened_album: Album;
+  most_listened_artist: ArtistFull;
+  most_listened_day: {
+    day: string;
+    listen_time_ms: number;
+  }
+  playlist_id?: string;
 }
 

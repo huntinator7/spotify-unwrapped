@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "description": "A Spotify data tracker that lets users subscribe to having their data tracked and stored for their own viewing pleasure, whenever they want",
   "scripts": {
+    "local": "ts-node src/local.ts",
     "lint": "eslint --ext .js,.ts .",
     "build": "tsc",
     "build:watch": "tsc --watch",
@@ -32,6 +33,7 @@
     "firebase-functions": "^4.1.1",
     "node-fetch": "^2.6.1",
     "spotify-web-api-node": "^5.0.2",
+    "ts-node": "^10.9.1",
     "uuid": "^9.0.0"
   },
   "devDependencies": {

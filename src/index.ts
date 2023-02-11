@@ -1,5 +1,4 @@
 import * as functions from "firebase-functions/v1";
-import {onMessagePublished} from "firebase-functions/v2/pubsub";
 import {firestore} from "firebase-admin";
 import {getApps, initializeApp} from "firebase-admin/app";
 if (!getApps().length) {
@@ -20,7 +19,8 @@ import {initAggregatedSessions} from "./endpoints/publicStats";
 import {User} from "./types";
 import {queries} from "./scripts/queries";
 import {createTestFunction} from "./scripts/helpers";
-import {populatUserArtists} from "./endpoints/oneoff";
+import {HttpsError, onCall} from "firebase-functions/v2/https";
+import {createTopSongsPlaylist} from "./endpoints/playlists";
 
 exports.getListens = functions
     .pubsub.schedule("0,15,30,45 * * * *")
@@ -55,10 +55,20 @@ exports.getNewAggregatedSessions = functions
       initAggregatedSessions(new Date(new Date().setHours(new Date().getHours() - 24)).toISOString());
     });
 
+exports.createplaylist = onCall(async (request) => {
+  const uid = request.auth?.uid;
+  const {month} = request.data;
+  if (!uid) {
+    throw new HttpsError("unauthenticated", "The request does not have valid authentication credentials for the operation");
+  }
+  if (!month) {
+    throw new HttpsError("invalid-argument", "No month was provided");
+  }
+  return createTopSongsPlaylist(uid, month);
+});
+
 exports["getlistensmanual"] = createTestFunction("listensManualKey", () => getRecentListens());
 
 exports["combinesessionsmanual"] = createTestFunction("combineSessionsManual", () => initCombineSessions());
 
 exports["initaggregatedsessions"] = createTestFunction("initAggregatedSessions", (data) => initAggregatedSessions(data.date as string));
-
-exports["populateartists"] = onMessagePublished("populateartists", () => populatUserArtists());

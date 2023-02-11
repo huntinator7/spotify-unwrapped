@@ -1,6 +1,6 @@
 import {Firestore, getFirestore, QuerySnapshot, DocumentSnapshot, DocumentReference, QueryDocumentSnapshot, FieldValue, UpdateData, WriteBatch, Transaction} from "firebase-admin/firestore";
-import {getEndTime} from "./helpers";
-import {Album, Artist, Play, Session, Song, User} from "../types";
+import {getEndTime, numTo2Digit} from "./helpers";
+import {Album, Artist, Month, Play, Session, Song, User} from "../types";
 const db = getFirestore();
 
 function getUser(userId: string) {
@@ -35,16 +35,28 @@ async function getNextSession(userId: string, lastSession: DocumentSnapshot<Sess
       .get();
 }
 
+async function getSong(songId: string) {
+  return db.collection("Songs").doc(songId).get() as Promise<QueryDocumentSnapshot<Song>>;
+}
+
 async function getSongs() {
   return db.collection("Songs").get() as Promise<QuerySnapshot<Song>>;
+}
+
+async function getAlbum(albumId: string) {
+  return db.collection("Albums").doc(albumId).get() as Promise<QueryDocumentSnapshot<Album>>;
 }
 
 async function getAlbums() {
   return db.collection("Albums").get() as Promise<QuerySnapshot<Album>>;
 }
 
+async function getArtist(artistId: string) {
+  return db.collection("Artists").doc(artistId).get() as Promise<QueryDocumentSnapshot<Artist>>;
+}
+
 async function getArtists() {
-  return db.collection("Artists").get() as Promise<QuerySnapshot<Album>>;
+  return db.collection("Artists").get() as Promise<QuerySnapshot<Artist>>;
 }
 
 async function getUserSongs(userId: string) {
@@ -56,7 +68,7 @@ async function getAllUserSongs() {
 }
 
 async function getUserAlbums(userId: string) {
-  return db.collection("User").doc(userId).collection("UserAlbums").get() as Promise<QuerySnapshot<Song>>;
+  return db.collection("User").doc(userId).collection("UserAlbums").get() as Promise<QuerySnapshot<Album>>;
 }
 
 async function getAllUserAlbums() {
@@ -64,11 +76,19 @@ async function getAllUserAlbums() {
 }
 
 async function getUserArtists(userId: string) {
-  return db.collection("User").doc(userId).collection("UserArtists").get() as Promise<QuerySnapshot<Play>>;
+  return db.collection("User").doc(userId).collection("UserArtists").get() as Promise<QuerySnapshot<Artist>>;
 }
 
 async function getPlays(userId: string) {
   return db.collection("User").doc(userId).collection("Plays").get() as Promise<QuerySnapshot<Play>>;
+}
+
+async function getPlaysForMonth(userId: string, month: number) {
+  return db.collection("User").doc(userId).collection("Plays")
+      .orderBy("played_at", "asc")
+      .where("played_at", ">=", `2023-${numTo2Digit(month)}-01`)
+      .where("played_at", "<", `2023-${numTo2Digit(month+1)}-01`)
+      .get() as Promise<QuerySnapshot<Play>>;
 }
 
 async function getAllPlays() {
@@ -102,12 +122,21 @@ async function getPlaysShrink(start: string) {
   return db.collectionGroup("Plays").orderBy("played_at").startAfter(start).limit(20).get() as Promise<QuerySnapshot<Play>>;
 }
 
+async function getMonth(userId: string, month: string) {
+  return db.collection("User").doc(userId).collection("Months").doc(month).get() as Promise<QueryDocumentSnapshot<Month>>;
+}
+
+async function getTopSongs(userId: string, month: string) {
+  return db.collection("User").doc(userId).collection("Months").doc(month).collection("TopSongs").get() as Promise<QuerySnapshot<Song>>;
+}
+
 function createUser(userId: string) {
   return db.collection("User").doc(userId).set({
     created_date: new Date().toISOString(),
     last_updated: new Date().toISOString(),
     public: false,
     collect_additional_info: false,
+    available_months: [],
   }, {merge: true});
 }
 
@@ -131,6 +160,14 @@ function createAggSession(month: string, day: string, timestamps: Record<string,
 
 function createSong(song: Song) {
   return db.collection("Songs").doc(song.id).set(song);
+}
+
+function createMonth(userId: string, month: Month) {
+  return db.collection("User").doc(userId).collection("Months").doc(numTo2Digit(month.id)).set(month);
+}
+
+function createMonthSong(userId: string, month: number, song: Song) {
+  return db.collection("User").doc(userId).collection("Months").doc(numTo2Digit(month)).collection("TopSongs").doc(song.id).set(song);
 }
 
 function updateUser(userId: string, payload: Record<string, any>) {
@@ -207,8 +244,11 @@ export const queries = {
   getSessions,
   getNextSession,
   getLatestSession,
+  getSong,
   getSongs,
+  getAlbum,
   getAlbums,
+  getArtist,
   getArtists,
   getUserSongs,
   getAllUserSongs,
@@ -216,17 +256,22 @@ export const queries = {
   getAllUserAlbums,
   getUserArtists,
   getPlays,
+  getPlaysForMonth,
   getAllPlays,
   getNextPlay,
   getFirstPlay,
   getPlaysBefore,
   getSessionsInInterval,
   getPlaysShrink,
+  getMonth,
+  getTopSongs,
   createUser,
   createSession,
   createSessionFromPlay,
   createAggSession,
   createSong,
+  createMonth,
+  createMonthSong,
   updateUser,
   updateUserLastUpdated,
   updatePlay,

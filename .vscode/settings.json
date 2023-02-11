@@ -3,5 +3,7 @@
   "eslint.format.enable": true,
   "[typescript]": {
     "editor.defaultFormatter": "dbaeumer.vscode-eslint"
-  }
+  },
+  "prettier.tabWidth": 2,
+  "editor.tabSize": 2
 }
