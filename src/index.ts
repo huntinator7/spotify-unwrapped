@@ -13,12 +13,10 @@ import {
   initializeSpotify,
 } from "./endpoints/plays";
 import {createUser} from "./endpoints/user";
-import {initCombineSessions} from "./endpoints/sessions";
 import {initAggregatedSessions} from "./endpoints/publicStats";
 
 import {User} from "./types";
 import {queries} from "./scripts/queries";
-import {createTestFunction} from "./scripts/helpers";
 import {HttpsError, onCall} from "firebase-functions/v2/https";
 import {createTopSongsPlaylist} from "./endpoints/playlists";
 
@@ -66,9 +64,3 @@ exports.createplaylist = onCall(async (request) => {
   }
   return createTopSongsPlaylist(uid, month);
 });
-
-exports["getlistensmanual"] = createTestFunction("listensManualKey", () => getRecentListens());
-
-exports["combinesessionsmanual"] = createTestFunction("combineSessionsManual", () => initCombineSessions());
-
-exports["initaggregatedsessions"] = createTestFunction("initAggregatedSessions", (data) => initAggregatedSessions(data.date as string));

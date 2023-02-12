@@ -12,6 +12,7 @@ export type User = {
   collect_additional_info: boolean;
   total_listen_time_ms: number;
   total_plays: number;
+  available_months: AvailableMonth[];
 }
 
 export type AccessTokenResponse = {
@@ -74,4 +75,11 @@ export type Month = {
   }
   playlist_id?: string;
 }
+
+export type AvailableMonth = {
+  collection: string;
+  id: number;
+  month: number;
+  month_name: string;
+};
 

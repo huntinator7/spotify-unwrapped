@@ -11,18 +11,25 @@ export async function generateAllMonthlyStats(month: number) {
 export async function generateUserMonthlyStats(user: User, month: number) {
   // get all plays in that month
   const plays = await queries.getPlaysForMonth(user.id, month);
-  console.log("plays", plays.docs.length, plays.docs[0]);
+  console.log("plays for " + user.id, plays.docs.length, plays.docs[0]?.id);
+  if (!plays.docs || plays.docs.length === 0) {
+    console.log("no plays, no unwrapped");
+    return {[user.id]: "no plays"};
+  }
+  if (!user.refresh_token) {
+    console.log("no token, no unwrapped");
+    return {[user.id]: "no token"};
+  }
+  if (user.available_months?.find((a) => a.id === month)) {
+    console.log("already generated");
+    return {[user.id]: "no token"};
+  }
 
   const total_listen_time_ms = plays.docs.map((play) => play.data().duration_ms).reduce((a, c) => a + c, 0);
-  console.log("total_listen_time_ms", total_listen_time_ms);
 
   const [mostListenedSong, playsKeyedBySong] = await getMostListened<Song>(plays, (c) => c.data().id, "", queries.getSong);
-  const [mostListenedAlbum, playsKeyedByAlbum]= await getMostListened<Album>(plays, (c) => c.data().album.id, "No Album", queries.getAlbum);
+  const [mostListenedAlbum, playsKeyedByAlbum]= await getMostListened<Album>(plays, (c) => c.data().album?.id, "No Album", queries.getAlbum);
   const [mostListenedArtist, playsKeyedByArtist] = await getMostListened<Artist>(plays, (c) => c.data().artists?.[0]?.id, "No Artist", queries.getArtist);
-  // console.log("playsKeyedBySong", playsKeyedBySong);
-  console.log("mostListenedSong", mostListenedSong);
-  console.log("mostListenedAlbum", mostListenedAlbum);
-  console.log("mostListenedArtist", mostListenedArtist);
 
   const spotifyApi = await getSpotifyApi(user);
   const mostListenedArtistFull = await spotifyApi.getArtist(mostListenedArtist.id);
@@ -40,7 +47,6 @@ export async function generateUserMonthlyStats(user: User, month: number) {
     };
   }, {});
   const mostListenedDay = Object.entries(dayKeyed).sort(([_k1, v1], [_k2, v2]) => v2 - v1)[0];
-  console.log("mostListenedDay", mostListenedDay);
 
   const payload: Month = {
     id: month,
@@ -58,12 +64,11 @@ export async function generateUserMonthlyStats(user: User, month: number) {
       listen_time_ms: mostListenedDay[1],
     },
   };
-  console.log(payload);
 
   await queries.createMonth(user.id, payload);
 
   const fiftyMostListenedSongs: Song[] = await Promise.all(
-      playsKeyedBySong.slice(0, 50).map(async ([id, listens]) => {
+      playsKeyedBySong.filter(([id]) => !!id).slice(0, 50).map(async ([id, listens]) => {
         const song = await queries.getSong(id);
         return {
           ...song.data(),
@@ -73,7 +78,6 @@ export async function generateUserMonthlyStats(user: User, month: number) {
         };
       })
   );
-  console.log("fiftyMostListenedSongs[0]", fiftyMostListenedSongs[0]);
 
   await Promise.all(fiftyMostListenedSongs.map((song) => queries.createMonthSong(user.id, month, song)));
 
@@ -86,7 +90,7 @@ export async function generateUserMonthlyStats(user: User, month: number) {
     }),
   });
 
-  return payload;
+  return {[user.id]: payload};
 }
 
 async function getMostListened<T extends ListenInfo>(
@@ -106,7 +110,11 @@ async function getMostListened<T extends ListenInfo>(
   return [mostListenedWithListenData, playsKeyedSorted];
 }
 
-export async function createTopSongsPlaylist(userId: string, monthId: string) {
+type CreateTopSongsPlaylist = {
+  status: "error" | "success";
+  message: string;
+}
+export async function createTopSongsPlaylist(userId: string, monthId: string): Promise<CreateTopSongsPlaylist> {
   const month = await queries.getMonth(userId, monthId);
   const monthName = monthNames[month.data().id - 1];
   if (month.data().playlist_id) {
@@ -128,14 +136,12 @@ export async function createTopSongsPlaylist(userId: string, monthId: string) {
   if (newPlaylist.statusCode === 201) {
     const playlistId = newPlaylist.body.id;
 
-    // const imageUri = await import(`../playlistImages/${monthId}.txt`);
-    // await spotifyApi.uploadCustomPlaylistCoverImage(playlistId, imageUri);
-
     const topSongs = await queries.getTopSongs(userId, monthId);
     const tracks: string[] = topSongs.docs.map((song) => song.data().uri);
 
     const addTracksRes = await spotifyApi.addTracksToPlaylist(playlistId, tracks);
     if (addTracksRes.statusCode === 201) {
+      await queries.updateUser(userId, {playlist_id: playlistId});
       return {
         status: "success",
         message: "Successfully created playlist. Check your Spotify!",
