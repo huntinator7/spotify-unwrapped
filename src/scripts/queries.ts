@@ -195,6 +195,10 @@ function updateAggSession(month: string, day: string, timestamp: {[key: string]:
   return db.collection("Aggregated").doc("NumSessions").collection(month).doc(day).update(timestamp);
 }
 
+async function updateMonth(userId: string, month: string, monthUpdate: Partial<Month>) {
+  return db.collection("User").doc(userId).collection("Months").doc(month).update(monthUpdate);
+}
+
 function deleteSession(userId: string, sessionId: string) {
   return db.collection("User").doc(userId).collection("Sessions").doc(sessionId).delete();
 }
@@ -277,6 +281,7 @@ export const queries = {
   updatePlay,
   updateSession,
   updateAggSession,
+  updateMonth,
   deleteSession,
   setArtist,
   setUserArtist,

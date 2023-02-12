@@ -141,7 +141,7 @@ export async function createTopSongsPlaylist(userId: string, monthId: string): P
 
     const addTracksRes = await spotifyApi.addTracksToPlaylist(playlistId, tracks);
     if (addTracksRes.statusCode === 201) {
-      await queries.updateUser(userId, {playlist_id: playlistId});
+      await queries.updateMonth(userId, monthId, {playlist_id: playlistId});
       return {
         status: "success",
         message: "Successfully created playlist. Check your Spotify!",
